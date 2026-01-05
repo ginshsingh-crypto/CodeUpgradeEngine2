@@ -1,0 +1,151 @@
+<Window x:Class="LOD400Uploader.Views.UploadDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="LOD 400 Upload" 
+        Height="550" Width="700"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="CanResizeWithGrip"
+        Background="#111827">
+    
+    <Window.Resources>
+        <Style TargetType="Button" x:Key="PrimaryButton">
+            <Setter Property="Background" Value="#F59E0B"/>
+            <Setter Property="Foreground" Value="Black"/>
+            <Setter Property="Padding" Value="24,12"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" 
+                                CornerRadius="6" 
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#D97706"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Background" Value="#4B5563"/>
+                    <Setter Property="Foreground" Value="#9CA3AF"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+        
+        <Style TargetType="Button" x:Key="SecondaryButton">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#E5E7EB"/>
+            <Setter Property="Padding" Value="24,12"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="BorderBrush" Value="#374151"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" 
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="6" 
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#1F2937"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+    </Window.Resources>
+    
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        
+        <!-- Header -->
+        <Border Grid.Row="0" Background="#111827" BorderBrush="#374151" BorderThickness="0,0,0,1" Padding="24,20">
+            <StackPanel>
+                <TextBlock Text="Select Sheets" FontSize="24" FontWeight="Bold" Foreground="#F9FAFB"/>
+                <TextBlock Text="Choose the sheets to upload for LOD 400 upgrade" 
+                           FontSize="14" Foreground="#9CA3AF" Margin="0,8,0,0"/>
+            </StackPanel>
+        </Border>
+        
+        <!-- Sheet List -->
+        <Grid Grid.Row="1" Margin="24,16">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                <CheckBox x:Name="SelectAllCheckBox" Content="Select All" FontSize="14" Foreground="#E5E7EB"
+                          VerticalAlignment="Center" Click="SelectAllCheckBox_Click"/>
+                <TextBlock x:Name="SelectedCountText" Text="0 sheets selected" 
+                           FontSize="14" Foreground="#9CA3AF" Margin="20,0,0,0" VerticalAlignment="Center"/>
+            </StackPanel>
+            
+            <Border Grid.Row="1" Background="#1F2937" BorderBrush="#374151" BorderThickness="1" CornerRadius="8">
+                <ListView x:Name="SheetListView" BorderThickness="0" Background="Transparent" Foreground="#E5E7EB"
+                          SelectionMode="Multiple" SelectionChanged="SheetListView_SelectionChanged">
+                    <ListView.View>
+                        <GridView>
+                            <GridViewColumn Header="" Width="40">
+                                <GridViewColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}" 
+                                                  Click="SheetCheckBox_Click"/>
+                                    </DataTemplate>
+                                </GridViewColumn.CellTemplate>
+                            </GridViewColumn>
+                            <GridViewColumn Header="Sheet Number" Width="120" DisplayMemberBinding="{Binding SheetNumber}"/>
+                            <GridViewColumn Header="Sheet Name" Width="380" DisplayMemberBinding="{Binding SheetName}"/>
+                            <GridViewColumn Header="Revision" Width="80" DisplayMemberBinding="{Binding Revision}"/>
+                        </GridView>
+                    </ListView.View>
+                </ListView>
+            </Border>
+        </Grid>
+        
+        <!-- Footer -->
+        <Border Grid.Row="2" Background="#111827" BorderBrush="#374151" BorderThickness="0,1,0,0" Padding="24,16">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                
+                <!-- Progress (hidden by default) -->
+                <StackPanel x:Name="ProgressPanel" Grid.Column="0" Visibility="Collapsed" VerticalAlignment="Center">
+                    <TextBlock x:Name="ProgressText" Text="Preparing..." FontSize="14" Foreground="#9CA3AF"/>
+                    <ProgressBar x:Name="ProgressBar" Height="6" Margin="0,8,16,0" 
+                                 Background="#374151" Foreground="#F59E0B"/>
+                </StackPanel>
+                
+                <!-- Summary when not uploading (hidden when progress is shown) -->
+                <TextBlock x:Name="SummaryText" Grid.Column="0" VerticalAlignment="Center" FontSize="14" Foreground="#9CA3AF">
+                    <Run x:Name="SheetCountRun" Text="0"/> sheets selected
+                </TextBlock>
+                
+                <Button x:Name="CancelButton" Grid.Column="1" Content="Cancel" Style="{StaticResource SecondaryButton}" 
+                        Margin="0,0,12,0" Click="CancelButton_Click"/>
+                <Button x:Name="UploadButton" Grid.Column="2" Content="Upload" 
+                        Style="{StaticResource PrimaryButton}" Click="UploadButton_Click"
+                        IsEnabled="False"/>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>
