@@ -176,6 +176,11 @@ foreach ($version in $SelectedVersion) {
         
         Write-Host "  Copying $file to Revit $version..." -ForegroundColor Gray
         Copy-Item -Path $sourcePath -Destination $destPath -Force
+        
+        # Unblock the file to prevent Windows "Mark of the Web" from blocking the DLL
+        # Downloaded files are marked as untrusted and Revit won't load them without this
+        Unblock-File -Path $destPath -ErrorAction SilentlyContinue
+        Write-Host "  Unblocked $file" -ForegroundColor Gray
     }
     
     Write-Host "  Installed to Revit $version" -ForegroundColor Green

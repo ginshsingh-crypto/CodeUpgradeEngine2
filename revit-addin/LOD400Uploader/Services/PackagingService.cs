@@ -153,6 +153,11 @@ namespace LOD400Uploader.Services
                     openOptions.DetachFromCentralOption = DetachFromCentralOption.DetachAndPreserveWorksets;
                 }
                 
+                // CRITICAL: Set failures preprocessor to suppress warning dialogs
+                // Without this, warnings (missing fonts, corrupt elements, etc.) can show modal dialogs
+                // and freeze Revit forever since there's no user to click OK
+                openOptions.SetFailuresPreprocessor(new SuppressWarningsPreprocessor());
+                
                 // Open the copy in background (this does NOT affect the user's active document)
                 Document backgroundDoc = document.Application.OpenDocumentFile(modelPath, openOptions);
                 
@@ -183,6 +188,10 @@ namespace LOD400Uploader.Services
                     // The original document has the correct PathName for resolving relative links
                     data.LinksToCopy = CollectLinkPaths(document);
                     
+                    // CRITICAL: Block upload if cloud-hosted Revit links are detected
+                    // Cloud links (BIM 360, ACC) cannot be packaged and result in unusable "floating" models
+                    ValidateNoCloudLinks(data.LinksToCopy);
+                    
                     progressCallback?.Invoke(60, "Preparing manifest...");
                     
                     // Create manifest JSON from the background document (for sheet info)
@@ -204,6 +213,9 @@ namespace LOD400Uploader.Services
                 // Collect link paths from the original document (safe - it's not workshared)
                 data.LinksToCopy = CollectLinkPaths(document);
                 
+                // CRITICAL: Block upload if cloud-hosted Revit links are detected
+                ValidateNoCloudLinks(data.LinksToCopy);
+                
                 progressCallback?.Invoke(60, "Preparing manifest...");
                 
                 // Create manifest JSON from the original document
@@ -214,6 +226,33 @@ namespace LOD400Uploader.Services
             
             return data;
         }
+
+        /// <summary>
+        /// Validates that no cloud-hosted Revit links are present.
+        /// Cloud links cannot be packaged and result in unusable models for shop drawing production.
+        /// </summary>
+        private void ValidateNoCloudLinks(List<LinkToCopy> links)
+        {
+            // Only check non-skipped Revit links (not CAD, point clouds, etc.)
+            var cloudRevitLinks = links
+                .Where(l => l.IsCloud && !l.IsSkipped && l.Type == "RevitLink")
+                .ToList();
+
+            if (cloudRevitLinks.Count > 0)
+            {
+                var cloudLinkNames = string.Join("\n", cloudRevitLinks.Select(l => $"  • {l.Name}"));
+                
+                throw new InvalidOperationException(
+                    $"Cannot upload: The following linked models are hosted in BIM 360 or Autodesk Construction Cloud:\n\n" +
+                    $"{cloudLinkNames}\n\n" +
+                    $"Cloud-hosted links cannot be packaged for upload. Please:\n" +
+                    $"1. Bind these links into your model, OR\n" +
+                    $"2. Download local copies and relink them, OR\n" +
+                    $"3. Use File > Save As to create a local copy with local links\n\n" +
+                    $"Without these files, we cannot produce accurate shop drawings.");
+            }
+        }
+
 
         /// <summary>
         /// Phase 2: File operations (can run on background thread)
@@ -352,7 +391,9 @@ namespace LOD400Uploader.Services
                     File.Delete(_zipPath);
                 }
 
-                ZipFile.CreateFromDirectory(data.TempDir, _zipPath, CompressionLevel.Optimal, false);
+                // Create ZIP - use NoCompression because .rvt files are already internally compressed
+                // Double-compressing burns CPU with ~0.1% size savings and makes packaging 3-5x slower
+                ZipFile.CreateFromDirectory(data.TempDir, _zipPath, CompressionLevel.NoCompression, false);
 
                 progressCallback?.Invoke(90, "Cleaning up temporary files...");
                 CleanupTempDirectory();
@@ -955,5 +996,23 @@ namespace LOD400Uploader.Services
         public string Error { get; set; }
         public long FileSize { get; set; }
         public bool IsCloud { get; set; }
+    }
+
+    /// <summary>
+    /// IFailuresPreprocessor implementation that suppresses all warning dialogs.
+    /// Used when opening documents in background to prevent modal dialogs from freezing Revit.
+    /// Without this, warnings about missing fonts, corrupt elements, etc. would show modal dialogs
+    /// with no user to click OK, causing Revit to hang forever.
+    /// </summary>
+    public class SuppressWarningsPreprocessor : IFailuresPreprocessor
+    {
+        public FailureProcessingResult PreprocessFailures(FailuresAccessor failuresAccessor)
+        {
+            // Delete all warnings - we don't want any modal dialogs
+            failuresAccessor.DeleteAllWarnings();
+            
+            // Continue processing - don't abort the operation
+            return FailureProcessingResult.Continue;
+        }
     }
 }

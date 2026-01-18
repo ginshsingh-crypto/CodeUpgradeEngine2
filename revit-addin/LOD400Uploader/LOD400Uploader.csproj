@@ -1,7 +1,19 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net48</TargetFramework>
+    <!-- Multi-target framework support:
+         - Revit 2022, 2023, 2024: .NET Framework 4.8
+         - Revit 2025+: .NET 8
+         Set RevitVersion property to build for specific version:
+         dotnet build /p:RevitVersion=2024 (uses net48)
+         dotnet build /p:RevitVersion=2025 (uses net8.0-windows)
+    -->
+    <RevitVersion Condition="'$(RevitVersion)' == ''">2024</RevitVersion>
+    
+    <!-- Select target framework based on Revit version -->
+    <TargetFramework Condition="'$(RevitVersion)' &lt; '2025'">net48</TargetFramework>
+    <TargetFramework Condition="'$(RevitVersion)' &gt;= '2025'">net8.0-windows</TargetFramework>
+    
     <LangVersion>latest</LangVersion>
     <PlatformTarget>x64</PlatformTarget>
     <UseWPF>true</UseWPF>
@@ -13,10 +25,6 @@
     <OutputType>Library</OutputType>
     <RootNamespace>LOD400Uploader</RootNamespace>
     <AssemblyName>LOD400Uploader</AssemblyName>
-    <!-- Build configuration for multi-version support -->
-    <!-- Revit 2022, 2023, 2024 all use .NET Framework 4.8 -->
-    <!-- Set REVIT_VERSION environment variable or property to build for specific version -->
-    <RevitVersion Condition="'$(RevitVersion)' == ''">2024</RevitVersion>
   </PropertyGroup>
 
   <ItemGroup>
