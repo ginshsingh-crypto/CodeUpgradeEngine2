@@ -2,8 +2,6 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
-import { runMigrations } from 'stripe-replit-sync';
-import { getStripeSync } from "./stripeClient";
 import { WebhookHandlers } from "./webhookHandlers";
 import { db } from "./db";
 import { users } from "@shared/schema";
@@ -46,48 +44,6 @@ export function log(message: string, source = "express") {
   console.log(`${formattedTime} [${source}] ${message}`);
 }
 
-async function initStripe() {
-  const databaseUrl = process.env.DATABASE_URL;
-
-  if (!databaseUrl) {
-    log('DATABASE_URL not set, skipping Stripe initialization', 'stripe');
-    return;
-  }
-
-  try {
-    log('Initializing Stripe schema...', 'stripe');
-    await runMigrations({
-      databaseUrl,
-      schema: 'stripe'
-    });
-    log('Stripe schema ready', 'stripe');
-
-    const stripeSync = await getStripeSync();
-
-    log('Setting up managed webhook...', 'stripe');
-    const webhookBaseUrl = `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}`;
-    const webhookResult = await stripeSync.findOrCreateManagedWebhook(
-      `${webhookBaseUrl}/api/stripe/webhook`
-    );
-
-    if (webhookResult?.webhook?.url) {
-      log(`Webhook configured: ${webhookResult.webhook.url}`, 'stripe');
-    } else {
-      log('Webhook setup completed', 'stripe');
-    }
-
-    log('Syncing Stripe data...', 'stripe');
-    stripeSync.syncBackfill()
-      .then(() => {
-        log('Stripe data synced', 'stripe');
-      })
-      .catch((err: Error) => {
-        log(`Error syncing Stripe data: ${err.message}`, 'stripe');
-      });
-  } catch (error: any) {
-    log(`Failed to initialize Stripe: ${error.message}`, 'stripe');
-  }
-}
 
 (async () => {
   try {
@@ -96,35 +52,41 @@ async function initStripe() {
       log("TEST MODE ACTIVE - Payments are bypassed", "config");
     }
 
-    // Register Stripe webhook route FIRST (before json middleware)
-    // stripe-replit-sync integration pattern
+    // Register Moyasar webhook route FIRST (before json middleware)
+    // Must use express.raw() to capture exact bytes for HMAC signature verification
     app.post(
-      '/api/stripe/webhook',
+      '/api/moyasar/webhook',
       express.raw({ type: 'application/json' }),
       async (req, res) => {
-        const signature = req.headers['stripe-signature'];
+        const signature = req.headers['x-moyasar-signature'];
 
         if (!signature) {
-          return res.status(400).json({ error: 'Missing stripe-signature' });
+          log('Webhook error: Missing X-Moyasar-Signature header', 'moyasar');
+          return res.status(400).json({ error: 'Missing X-Moyasar-Signature' });
         }
 
         try {
           const sig = Array.isArray(signature) ? signature[0] : signature;
 
           if (!Buffer.isBuffer(req.body)) {
-            log('Webhook error: req.body is not a Buffer', 'stripe');
+            log('Webhook error: req.body is not a Buffer', 'moyasar');
             return res.status(500).json({ error: 'Webhook processing error' });
           }
 
-          await WebhookHandlers.processWebhook(req.body as Buffer, sig);
+          // Convert Buffer to string for signature verification
+          const rawBody = req.body.toString('utf8');
+          const payload = JSON.parse(rawBody);
+
+          await WebhookHandlers.processWebhook(rawBody, payload, sig);
 
           res.status(200).json({ received: true });
         } catch (error: any) {
-          log(`Webhook error: ${error.message}`, 'stripe');
+          log(`Webhook error: ${error.message}`, 'moyasar');
           res.status(400).json({ error: 'Webhook processing error' });
         }
       }
     );
+
 
     app.use(
       express.json({
@@ -196,10 +158,7 @@ async function initStripe() {
           log(`Admin setup error: ${err.message}`, 'auth');
         });
 
-        // Initialize Stripe in the background AFTER server is listening
-        initStripe().catch((err) => {
-          log(`Stripe initialization error: ${err.message}`, 'stripe');
-        });
+        // Payments are handled via Moyasar - no Stripe initialization needed
 
         // Start cron jobs
         import("./cron").then(({ startOrderCleanupJob }) => {

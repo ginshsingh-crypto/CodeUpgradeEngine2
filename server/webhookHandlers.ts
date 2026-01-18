@@ -3,7 +3,13 @@ import { storage } from './storage';
 import { sendOrderPaidEmail } from './emailService';
 
 export class WebhookHandlers {
-  static async processWebhook(payload: any, signature: string): Promise<void> {
+  /**
+   * Process Moyasar webhook event
+   * @param rawBody - The raw request body as a string (used for signature verification)
+   * @param payload - The parsed JSON payload
+   * @param signature - The X-Moyasar-Signature header value
+   */
+  static async processWebhook(rawBody: string, payload: any, signature: string): Promise<void> {
     const webhookSecret = process.env.MOYASAR_WEBHOOK_SECRET;
 
     // In production, we must have a webhook secret
@@ -15,8 +21,10 @@ export class WebhookHandlers {
     }
 
     // Verify signature if secret is present
+    // CRITICAL: Use rawBody (exact bytes received) for signature verification
+    // JSON.stringify(payload) may produce different output due to key ordering, formatting, etc.
     if (webhookSecret && signature) {
-      if (!verifyWebhookSignature(JSON.stringify(payload), signature, webhookSecret)) {
+      if (!verifyWebhookSignature(rawBody, signature, webhookSecret)) {
         throw new Error('Invalid webhook signature');
       }
     }
@@ -33,6 +41,7 @@ export class WebhookHandlers {
       await WebhookHandlers.handlePaymentPaid(payment);
     }
   }
+
 
   static async handlePaymentPaid(payment: any): Promise<void> {
     // We store the orderId in the payment metadata

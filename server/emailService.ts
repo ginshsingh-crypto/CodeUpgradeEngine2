@@ -5,11 +5,11 @@ let connectionSettings: any;
 
 async function getCredentials() {
   const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
-  const xReplitToken = process.env.REPL_IDENTITY 
-    ? 'repl ' + process.env.REPL_IDENTITY 
-    : process.env.WEB_REPL_RENEWAL 
-    ? 'depl ' + process.env.WEB_REPL_RENEWAL 
-    : null;
+  const xReplitToken = process.env.REPL_IDENTITY
+    ? 'repl ' + process.env.REPL_IDENTITY
+    : process.env.WEB_REPL_RENEWAL
+      ? 'depl ' + process.env.WEB_REPL_RENEWAL
+      : null;
 
   if (!xReplitToken) {
     throw new Error('X_REPLIT_TOKEN not found for repl/depl');
@@ -29,7 +29,7 @@ async function getCredentials() {
     throw new Error('Resend not connected');
   }
   return {
-    apiKey: connectionSettings.settings.api_key, 
+    apiKey: connectionSettings.settings.api_key,
     fromEmail: connectionSettings.settings.from_email
   };
 }
@@ -45,18 +45,18 @@ export async function getUncachableResendClient() {
 }
 
 export async function sendPasswordResetEmail(
-  toEmail: string, 
+  toEmail: string,
   resetUrl: string,
   firstName?: string
 ): Promise<boolean> {
   try {
     const { client, fromEmail } = await getUncachableResendClient();
-    
+
     const name = firstName || 'there';
-    
+
     // Always use the verified deepnewbim.com domain
     const verifiedFromEmail = 'LOD 400 Platform <noreply@deepnewbim.com>';
-    
+
     const { data, error } = await client.emails.send({
       from: verifiedFromEmail,
       to: toEmail,
@@ -119,10 +119,10 @@ export async function sendOrderPaidEmail(
 ): Promise<boolean> {
   try {
     const { client } = await getUncachableResendClient();
-    
+
     const name = firstName || 'there';
     const verifiedFromEmail = 'LOD 400 Platform <noreply@deepnewbim.com>';
-    
+
     const { data, error } = await client.emails.send({
       from: verifiedFromEmail,
       to: toEmail,
@@ -154,7 +154,7 @@ export async function sendOrderPaidEmail(
             </p>
             
             <div style="text-align: center; margin: 32px 0;">
-              <a href="https://deepnewbim.com" style="display: inline-block; background: #d4a853; color: #000000; text-decoration: none; font-weight: 600; padding: 14px 32px; border-radius: 6px; font-size: 16px;">
+              <a href="${process.env.APP_URL || 'https://deepnewbim.com'}" style="display: inline-block; background: #d4a853; color: #000000; text-decoration: none; font-weight: 600; padding: 14px 32px; border-radius: 6px; font-size: 16px;">
                 Go to Dashboard
               </a>
             </div>
@@ -189,14 +189,14 @@ export async function sendContactFormEmail(
 ): Promise<boolean> {
   try {
     const { client } = await getUncachableResendClient();
-    
+
     const adminEmail = process.env.ADMIN_EMAIL;
     if (!adminEmail) {
       console.error('ADMIN_EMAIL environment variable is not set');
       return false;
     }
     const verifiedFromEmail = 'LOD 400 Platform <noreply@deepnewbim.com>';
-    
+
     const { data, error } = await client.emails.send({
       from: verifiedFromEmail,
       to: adminEmail,
@@ -256,10 +256,10 @@ export async function sendOrderCompleteEmail(
 ): Promise<boolean> {
   try {
     const { client } = await getUncachableResendClient();
-    
+
     const name = firstName || 'there';
     const verifiedFromEmail = 'LOD 400 Platform <noreply@deepnewbim.com>';
-    
+
     const { data, error } = await client.emails.send({
       from: verifiedFromEmail,
       to: toEmail,
@@ -291,7 +291,7 @@ export async function sendOrderCompleteEmail(
             </p>
             
             <div style="text-align: center; margin: 32px 0;">
-              <a href="https://deepnewbim.com" style="display: inline-block; background: #d4a853; color: #000000; text-decoration: none; font-weight: 600; padding: 14px 32px; border-radius: 6px; font-size: 16px;">
+              <a href="${process.env.APP_URL || 'https://deepnewbim.com'}" style="display: inline-block; background: #d4a853; color: #000000; text-decoration: none; font-weight: 600; padding: 14px 32px; border-radius: 6px; font-size: 16px;">
                 Download Now
               </a>
             </div>

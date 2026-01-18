@@ -31,7 +31,7 @@ export class ObjectNotFoundError extends Error {
 }
 
 export class ObjectStorageService {
-  constructor() {}
+  constructor() { }
 
   getPublicObjectSearchPaths(): Array<string> {
     const pathsStr = process.env.PUBLIC_OBJECT_SEARCH_PATHS || "";
@@ -46,18 +46,19 @@ export class ObjectStorageService {
     if (paths.length === 0) {
       throw new Error(
         "PUBLIC_OBJECT_SEARCH_PATHS not set. Create a bucket in 'Object Storage' " +
-          "tool and set PUBLIC_OBJECT_SEARCH_PATHS env var (comma-separated paths)."
+        "tool and set PUBLIC_OBJECT_SEARCH_PATHS env var (comma-separated paths)."
       );
     }
     return paths;
   }
 
   getPrivateObjectDir(): string {
-    const dir = process.env.PRIVATE_OBJECT_DIR || "";
+    // Support both PRIVATE_OBJECT_DIR and Replit's DEFAULT_OBJECT_STORAGE_BUCKET_ID
+    const dir = process.env.PRIVATE_OBJECT_DIR || process.env.DEFAULT_OBJECT_STORAGE_BUCKET_ID || "";
     if (!dir) {
       throw new Error(
-        "PRIVATE_OBJECT_DIR not set. Create a bucket in 'Object Storage' " +
-          "tool and set PRIVATE_OBJECT_DIR env var."
+        "PRIVATE_OBJECT_DIR (or DEFAULT_OBJECT_STORAGE_BUCKET_ID) not set. Create a bucket in 'Object Storage' " +
+        "tool and set PRIVATE_OBJECT_DIR env var."
       );
     }
     return dir;
@@ -197,7 +198,7 @@ export class ObjectStorageService {
 
   async getDownloadURL(storageKey: string): Promise<string> {
     const { bucketName, objectName } = this.parseObjectPath(storageKey);
-    
+
     return this.signObjectURL({
       bucketName,
       objectName,
@@ -227,15 +228,15 @@ export class ObjectStorageService {
       const bucket = objectStorageClient.bucket(bucketName);
       const file = bucket.file(objectName);
       const [exists] = await file.exists();
-      
+
       if (!exists) {
         return { exists: false };
       }
 
       const [metadata] = await file.getMetadata();
-      return { 
-        exists: true, 
-        size: metadata.size ? parseInt(String(metadata.size), 10) : undefined 
+      return {
+        exists: true,
+        size: metadata.size ? parseInt(String(metadata.size), 10) : undefined
       };
     } catch (error) {
       console.error("Error verifying file exists:", error);
@@ -283,13 +284,13 @@ export class ObjectStorageService {
       method,
       expires_at: new Date(Date.now() + ttlSec * 1000).toISOString(),
     };
-    
+
     // Include content-type in signature if provided
     // This prevents GCS 403 errors when client sends Content-Type header
     if (contentType) {
       request.content_type = contentType;
     }
-    
+
     const response = await fetch(
       `${REPLIT_SIDECAR_ENDPOINT}/object-storage/signed-object-url`,
       {
