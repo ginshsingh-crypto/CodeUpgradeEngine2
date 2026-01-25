@@ -62,6 +62,14 @@ export class WebhookHandlers {
         return;
       }
 
+      // Security: Verify payment amount matches order total
+      // Prevents manipulation where attacker pays less than order price
+      const expectedAmountHalala = order.totalPriceSar * 100; // Moyasar uses halala (1 SAR = 100 halala)
+      if (payment.amount !== expectedAmountHalala) {
+        console.error(`Payment amount mismatch for order ${orderId}: expected ${expectedAmountHalala} halala, got ${payment.amount} halala`);
+        return;
+      }
+
       await storage.updateOrder(orderId, {
         moyasarPaymentId: payment.id,
         moyasarInvoiceId: payment.invoice_id,
@@ -71,22 +79,7 @@ export class WebhookHandlers {
 
       console.log(`Order ${orderId} marked as paid`);
 
-      // Send payment confirmation email
-      if (order.user?.email) {
-        sendOrderPaidEmail(
-          order.user.email,
-          orderId,
-          order.sheetCount,
-          order.user.firstName || undefined
-        ).catch(err => console.error('Failed to send paid email:', err));
-      } (order as any).user = order.user || await storage.getUser(order.userId); // Ensure user is loaded for email
-
-      // Re-fetch with user for email if needed (files/user relations might be missing in basic getOrder)
-      // The sendOrderPaidEmail function needs user email. 
-      // storage.getOrder uses db.query.orders.findFirst({ with: { user: true } }) usually?
-      // Let's verify getOrder implementation. 
-      // Actually updateOrder returns the updated order without relations usually.
-      // So let's fetch strictly for email.
+      // Send payment confirmation email (fetch full order with user relations)
       const fullOrder = await storage.getOrderWithFiles(orderId);
       if (fullOrder?.user?.email) {
         sendOrderPaidEmail(

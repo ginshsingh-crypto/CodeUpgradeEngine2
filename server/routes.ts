@@ -4,11 +4,57 @@ import { storage } from "./storage";
 import { setupAuth, isAuthenticated, isAdmin } from "./replitAuth";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import { createOrderRequestSchema, PRICE_PER_SHEET_SAR } from "@shared/schema";
-import { getUncachableStripeClient } from "./stripeClient";
 import { sendPasswordResetEmail, sendOrderPaidEmail, sendOrderCompleteEmail, sendContactFormEmail } from "./emailService";
+import { validateUploadFile, MAX_FILE_SIZE_BYTES, getMaxFileSizeDisplay } from "./utils/fileValidation";
+import { validateZipFile } from "./utils/zipValidator";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { z } from "zod";
+
+// ============================================
+// ADD-IN VERSION ENFORCEMENT
+// ============================================
+const MIN_ADDIN_VERSION = "1.0.0";
+
+/**
+ * Compare semantic versions (major.minor.patch)
+ * Returns: -1 if a < b, 0 if a == b, 1 if a > b
+ */
+function compareVersions(a: string, b: string): number {
+  const partsA = a.split('.').map(n => parseInt(n, 10) || 0);
+  const partsB = b.split('.').map(n => parseInt(n, 10) || 0);
+
+  for (let i = 0; i < 3; i++) {
+    const numA = partsA[i] || 0;
+    const numB = partsB[i] || 0;
+    if (numA < numB) return -1;
+    if (numA > numB) return 1;
+  }
+  return 0;
+}
+
+/**
+ * Middleware to check add-in version from X-Client-Version header
+ */
+function checkAddinVersion(req: any, res: any, next: any) {
+  const clientVersion = req.headers['x-client-version'];
+
+  // If no version header, allow (for backwards compatibility during rollout)
+  // After all clients are updated, change this to reject
+  if (!clientVersion) {
+    return next();
+  }
+
+  if (compareVersions(clientVersion, MIN_ADDIN_VERSION) < 0) {
+    return res.status(426).json({
+      message: `Your add-in version (${clientVersion}) is outdated. Please update to version ${MIN_ADDIN_VERSION} or later.`,
+      minVersion: MIN_ADDIN_VERSION,
+      currentVersion: clientVersion,
+    });
+  }
+
+  next();
+}
 
 const objectStorage = new ObjectStorageService();
 
@@ -185,12 +231,18 @@ export async function registerRoutes(
       // Create user
       const user = await storage.createUserWithPassword(email, passwordHash, firstName, lastName);
 
-      // Auto-login: set web session cookie
-      req.session.userId = user.id;
+      // Security: Regenerate session to prevent session fixation attacks
+      req.session.regenerate((err) => {
+        if (err) {
+          console.error("Session regeneration error:", err);
+          return res.status(500).json({ message: "Failed to create session" });
+        }
+        req.session.userId = user.id;
 
-      res.status(201).json({
-        message: "User registered successfully",
-        user: safeUserInfo(user),
+        res.status(201).json({
+          message: "User registered successfully",
+          user: safeUserInfo(user),
+        });
       });
     } catch (error) {
       console.error("Error registering user:", error);
@@ -221,12 +273,18 @@ export async function registerRoutes(
         return res.status(401).json({ message: "Invalid email or password" });
       }
 
-      // Set web session cookie
-      req.session.userId = user.id;
+      // Security: Regenerate session to prevent session fixation attacks
+      req.session.regenerate((err) => {
+        if (err) {
+          console.error("Session regeneration error:", err);
+          return res.status(500).json({ message: "Failed to create session" });
+        }
+        req.session.userId = user.id;
 
-      res.json({
-        message: "Login successful",
-        user: safeUserInfo(user),
+        res.json({
+          message: "Login successful",
+          user: safeUserInfo(user),
+        });
       });
     } catch (error) {
       console.error("Error logging in:", error);
@@ -703,6 +761,15 @@ export async function registerRoutes(
         });
       }
 
+      // Security check: Verify file is actually a ZIP by checking magic bytes
+      const zipValidation = await validateZipFile(storageKey);
+      if (!zipValidation.valid) {
+        console.warn(`ZIP validation failed for order ${orderId}: ${zipValidation.error}`);
+        return res.status(400).json({
+          message: zipValidation.error || "Invalid file format. Please upload a valid ZIP archive."
+        });
+      }
+
       // Use verified size if client didn't provide one
       const verifiedSize = verification.size || fileSize || null;
 
@@ -948,11 +1015,11 @@ export async function registerRoutes(
     return res.status(401).json({ message: "Authentication required. Please sign in with your email and password." });
   };
 
-  app.get("/api/addin/validate", isAddinAuthenticated, async (req: any, res) => {
-    res.json({ valid: true, userId: req.apiUser.id });
+  app.get("/api/addin/validate", checkAddinVersion, isAddinAuthenticated, async (req: any, res) => {
+    res.json({ valid: true, userId: req.apiUser.id, minVersion: MIN_ADDIN_VERSION });
   });
 
-  app.post("/api/addin/create-order", isAddinAuthenticated, async (req: any, res) => {
+  app.post("/api/addin/create-order", checkAddinVersion, isAddinAuthenticated, async (req: any, res) => {
     try {
       const userId = req.apiUser.id;
       const parsed = createOrderRequestSchema.safeParse(req.body);
@@ -1019,7 +1086,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/addin/orders", isAddinAuthenticated, async (req: any, res) => {
+  app.get("/api/addin/orders", checkAddinVersion, isAddinAuthenticated, async (req: any, res) => {
     try {
       const userId = req.apiUser.id;
       const orders = await storage.getOrdersByUserId(userId);
@@ -1030,7 +1097,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/addin/orders/:orderId/status", isAddinAuthenticated, async (req: any, res) => {
+  app.get("/api/addin/orders/:orderId/status", checkAddinVersion, isAddinAuthenticated, async (req: any, res) => {
     try {
       const userId = req.apiUser.id;
       const { orderId } = req.params;
@@ -1051,7 +1118,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/addin/orders/:orderId/upload-url", isAddinAuthenticated, async (req: any, res) => {
+  app.post("/api/addin/orders/:orderId/upload-url", checkAddinVersion, isAddinAuthenticated, async (req: any, res) => {
     try {
       const userId = req.apiUser.id;
       const { orderId } = req.params;
@@ -1083,7 +1150,7 @@ export async function registerRoutes(
   });
 
   // Resumable upload endpoints for large files
-  app.post("/api/addin/orders/:orderId/resumable-upload", isAddinAuthenticated, async (req: any, res) => {
+  app.post("/api/addin/orders/:orderId/resumable-upload", checkAddinVersion, isAddinAuthenticated, async (req: any, res) => {
     try {
       const userId = req.apiUser.id;
       const { orderId } = req.params;
@@ -1092,6 +1159,13 @@ export async function registerRoutes(
       if (!fileName || !fileSize) {
         return res.status(400).json({ message: "fileName and fileSize are required" });
       }
+
+      // --- FILE VALIDATION (Security) ---
+      const validation = validateUploadFile(fileName, fileSize);
+      if (!validation.valid) {
+        return res.status(400).json({ message: validation.error });
+      }
+      // --- END VALIDATION ---
 
       const order = await storage.getOrder(orderId);
       if (!order) {
@@ -1114,7 +1188,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/addin/resumable-upload-status", isAddinAuthenticated, async (req: any, res) => {
+  app.post("/api/addin/resumable-upload-status", checkAddinVersion, isAddinAuthenticated, async (req: any, res) => {
     try {
       const { sessionUri } = req.body;
 
@@ -1130,7 +1204,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/addin/orders/:orderId/upload-complete", isAddinAuthenticated, async (req: any, res) => {
+  app.post("/api/addin/orders/:orderId/upload-complete", checkAddinVersion, isAddinAuthenticated, async (req: any, res) => {
     try {
       const userId = req.apiUser.id;
       const { orderId } = req.params;
@@ -1161,6 +1235,15 @@ export async function registerRoutes(
         });
       }
 
+      // Security check: Verify file is actually a ZIP by checking magic bytes
+      const zipValidation = await validateZipFile(storageKey);
+      if (!zipValidation.valid) {
+        console.warn(`ZIP validation failed for order ${orderId}: ${zipValidation.error}`);
+        return res.status(400).json({
+          message: zipValidation.error || "Invalid file format. Please upload a valid ZIP archive."
+        });
+      }
+
       // Use verified size if client didn't provide one
       const verifiedSize = verification.size || fileSize || null;
 
@@ -1181,7 +1264,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/addin/orders/:orderId/download-url", isAddinAuthenticated, async (req: any, res) => {
+  app.get("/api/addin/orders/:orderId/download-url", checkAddinVersion, isAddinAuthenticated, async (req: any, res) => {
     try {
       const userId = req.apiUser.id;
       const { orderId } = req.params;
@@ -1431,13 +1514,20 @@ For pre-compiled versions, contact support.
     }
   });
 
+  // Balance top-up schema for request validation
+  const topupSchema = z.object({
+    amountSar: z.number().positive("Amount must be positive"),
+    companyId: z.string().uuid().optional(),
+  });
+
   app.post("/api/balance/topup", isAuthenticated, async (req: any, res) => {
     try {
-      const { amountSar, companyId } = req.body;
-
-      if (!amountSar || amountSar <= 0) {
-        return res.status(400).json({ message: "Amount must be positive" });
+      const parsed = topupSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid request", errors: parsed.error.errors });
       }
+
+      const { amountSar, companyId } = parsed.data;
 
       const { BalanceService } = await import("./balanceService");
 
@@ -1473,10 +1563,20 @@ For pre-compiled versions, contact support.
     }
   });
 
+  // Pay with balance schema
+  const payWithBalanceSchema = z.object({
+    companyId: z.string().uuid().optional(),
+  });
+
   app.post("/api/orders/:orderId/pay-with-balance", isAuthenticated, async (req: any, res) => {
     try {
       const { orderId } = req.params;
-      const { companyId } = req.body;
+      const parsed = payWithBalanceSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid request", errors: parsed.error.errors });
+      }
+
+      const { companyId } = parsed.data;
       const userId = req.dbUser.id;
 
       const order = await storage.getOrder(orderId);

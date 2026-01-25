@@ -76,7 +76,7 @@ export class BalanceService {
             amount: amountSar * 100, // Convert to halalas
             currency: "SAR",
             description: `Balance Top-up: ${amountSar} SAR`,
-            callback_url: `${process.env.APP_URL}/balance/topup-callback`,
+            callback_url: `${process.env.APP_URL}/api/balance/topup-callback`,
             metadata: {
                 transactionId: transaction.id,
                 type: "topup",

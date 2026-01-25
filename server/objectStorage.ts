@@ -2,25 +2,61 @@ import { Storage, File } from "@google-cloud/storage";
 import { Response } from "express";
 import { randomUUID } from "crypto";
 
-const REPLIT_SIDECAR_ENDPOINT = "http://127.0.0.1:1106";
+// ============================================
+// GCS CLIENT INITIALIZATION
+// ============================================
 
-export const objectStorageClient = new Storage({
-  credentials: {
-    audience: "replit",
-    subject_token_type: "access_token",
-    token_url: `${REPLIT_SIDECAR_ENDPOINT}/token`,
-    type: "external_account",
-    credential_source: {
-      url: `${REPLIT_SIDECAR_ENDPOINT}/credential`,
-      format: {
-        type: "json",
-        subject_token_field_name: "access_token",
+/**
+ * Creates GCS client with portable authentication.
+ * 
+ * Priority:
+ * 1. GCS_SERVICE_ACCOUNT_JSON env var (for Cloudflare, Docker, etc.)
+ * 2. GOOGLE_APPLICATION_CREDENTIALS file path (standard GCP)
+ * 3. Replit sidecar (legacy, for Replit deployments only)
+ */
+function createStorageClient(): Storage {
+  // Option 1: Service account JSON in environment variable (recommended for Cloudflare)
+  if (process.env.GCS_SERVICE_ACCOUNT_JSON) {
+    try {
+      const credentials = JSON.parse(process.env.GCS_SERVICE_ACCOUNT_JSON);
+      return new Storage({
+        credentials,
+        projectId: credentials.project_id,
+      });
+    } catch (error) {
+      console.error("Failed to parse GCS_SERVICE_ACCOUNT_JSON:", error);
+      throw new Error("Invalid GCS_SERVICE_ACCOUNT_JSON format. Must be valid JSON.");
+    }
+  }
+
+  // Option 2: Standard GCP credentials file (works in GCE, Cloud Run, local dev)
+  if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+    return new Storage();
+  }
+
+  // Option 3: Replit sidecar (legacy - only works in Replit environment)
+  const REPLIT_SIDECAR_ENDPOINT = "http://127.0.0.1:1106";
+  console.log("Using Replit sidecar for GCS authentication (only works in Replit)");
+  return new Storage({
+    credentials: {
+      audience: "replit",
+      subject_token_type: "access_token",
+      token_url: `${REPLIT_SIDECAR_ENDPOINT}/token`,
+      type: "external_account",
+      credential_source: {
+        url: `${REPLIT_SIDECAR_ENDPOINT}/credential`,
+        format: {
+          type: "json",
+          subject_token_field_name: "access_token",
+        },
       },
+      universe_domain: "googleapis.com",
     },
-    universe_domain: "googleapis.com",
-  },
-  projectId: "",
-});
+    projectId: "",
+  });
+}
+
+export const objectStorageClient = createStorageClient();
 
 export class ObjectNotFoundError extends Error {
   constructor() {
@@ -265,6 +301,10 @@ export class ObjectStorageService {
     return { bucketName, objectName };
   }
 
+  /**
+   * Generate signed URL using GCS client library (portable).
+   * Works with any GCS authentication method.
+   */
   async signObjectURL({
     bucketName,
     objectName,
@@ -278,35 +318,30 @@ export class ObjectStorageService {
     ttlSec: number;
     contentType?: string;
   }): Promise<string> {
-    const request: Record<string, string> = {
-      bucket_name: bucketName,
-      object_name: objectName,
-      method,
-      expires_at: new Date(Date.now() + ttlSec * 1000).toISOString(),
+    const bucket = objectStorageClient.bucket(bucketName);
+    const file = bucket.file(objectName);
+
+    const options: any = {
+      version: "v4" as const,
+      action: method.toLowerCase() as "read" | "write" | "delete",
+      expires: Date.now() + ttlSec * 1000,
     };
 
-    // Include content-type in signature if provided
-    // This prevents GCS 403 errors when client sends Content-Type header
-    if (contentType) {
-      request.content_type = contentType;
+    // Map HTTP methods to GCS actions
+    if (method === "GET" || method === "HEAD") {
+      options.action = "read";
+    } else if (method === "PUT") {
+      options.action = "write";
+    } else if (method === "DELETE") {
+      options.action = "delete";
     }
 
-    const response = await fetch(
-      `${REPLIT_SIDECAR_ENDPOINT}/object-storage/signed-object-url`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(request),
-      }
-    );
-    if (!response.ok) {
-      throw new Error(
-        `Failed to sign object URL, errorcode: ${response.status}`
-      );
+    // Include content-type in signature if provided
+    if (contentType) {
+      options.contentType = contentType;
     }
-    const { signed_url: signedURL } = await response.json();
-    return signedURL;
+
+    const [signedUrl] = await file.getSignedUrl(options);
+    return signedUrl;
   }
 }
