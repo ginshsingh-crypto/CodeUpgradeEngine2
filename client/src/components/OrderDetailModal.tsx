@@ -70,6 +70,8 @@ export function OrderDetailModal({
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [isUploading, setIsUploading] = useState(false);
+  // Map to store storageKeys for files being uploaded
+  const [uploadKeys, setUploadKeys] = useState<Record<string, string>>({});
 
   const getUploadUrl = async (fileName: string): Promise<string> => {
     if (!order) throw new Error("No order selected");
@@ -78,17 +80,24 @@ export function OrderDetailModal({
       fileName,
     });
     const data = await response.json();
-    return data.uploadURL;
+
+    // Store storageKey for completion step
+    setUploadKeys(prev => ({ ...prev, [fileName]: data.storageKey }));
+
+    return data.uploadUrl;
   };
 
   const handleUploadComplete = async (fileName: string, uploadUrl: string, fileSize: number) => {
     if (!order) return;
 
     try {
+      const storageKey = uploadKeys[fileName];
+      if (!storageKey) throw new Error("Missing storage key for file");
+
       await apiRequest("POST", `/api/admin/orders/${order.id}/upload-complete`, {
         fileName,
         fileSize,
-        uploadURL: uploadUrl,
+        storageKey,
       });
     } catch (error) {
       console.error("Error completing upload:", error);

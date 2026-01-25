@@ -20,6 +20,8 @@ export const orderStatusEnum = pgEnum("order_status", [
   "uploaded",
   "processing",
   "complete",
+  "expired",
+  "cancelled",
 ]);
 
 // File type enum
@@ -67,16 +69,100 @@ export const orders = pgTable("orders", {
   completedAt: timestamp("completed_at"),
 });
 
-// ... (files, orderSheets, apiKeys, addinSessions, passwordResetTokens)
+// Files table - stores input and output files for orders
+export const files = pgTable("files", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orderId: varchar("order_id").notNull().references(() => orders.id),
+  fileType: fileTypeEnum("file_type").notNull(),
+  fileName: varchar("file_name").notNull(),
+  fileSize: bigint("file_size", { mode: "number" }),
+  storageKey: varchar("storage_key").notNull(),
+  mimeType: varchar("mime_type"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [index("IDX_files_order_id").on(table.orderId)]);
 
-// ...
+// Order sheets - individual sheets within an order
+export const orderSheets = pgTable("order_sheets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orderId: varchar("order_id").notNull().references(() => orders.id),
+  sheetElementId: varchar("sheet_element_id").notNull(),
+  sheetNumber: varchar("sheet_number").notNull(),
+  sheetName: varchar("sheet_name").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [index("IDX_order_sheets_order_id").on(table.orderId)]);
+
+// API Keys for external integrations (deprecated, kept for compatibility)
+export const apiKeys = pgTable("api_keys", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  keyHash: varchar("key_hash").notNull(),
+  name: varchar("name").notNull(),
+  lastUsedAt: timestamp("last_used_at"),
+  expiresAt: timestamp("expires_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [index("IDX_api_keys_user_id").on(table.userId)]);
+
+// Add-in sessions for Revit add-in authentication
+export const addinSessions = pgTable("addin_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  tokenHash: varchar("token_hash").notNull().unique(),
+  deviceLabel: varchar("device_label"),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("IDX_addin_sessions_user_id").on(table.userId),
+  index("IDX_addin_sessions_token_hash").on(table.tokenHash),
+]);
+
+// Password reset tokens
+export const passwordResetTokens = pgTable("password_reset_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  tokenHash: varchar("token_hash").notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+  usedAt: timestamp("used_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [index("IDX_password_reset_tokens_token_hash").on(table.tokenHash)]);
+
+// Insert schemas for new tables
+export const insertFileSchema = createInsertSchema(files).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertOrderSheetSchema = createInsertSchema(orderSheets).omit({
+  id: true,
+  createdAt: true,
+});
+
+// Types for new tables
+export type File = typeof files.$inferSelect;
+export type OrderSheet = typeof orderSheets.$inferSelect;
+export type ApiKey = typeof apiKeys.$inferSelect;
+export type AddinSession = typeof addinSessions.$inferSelect;
+export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
+
+// Create order request schema (used by both web and add-in)
+export const createOrderRequestSchema = z.object({
+  sheetCount: z.number().int().positive(),
+  sheets: z.array(z.object({
+    sheetElementId: z.string(),
+    sheetNumber: z.string(),
+    sheetName: z.string(),
+  })),
+});
+
+export type InsertOrder = typeof orders.$inferInsert;
+export type Order = typeof orders.$inferSelect;
+export type User = typeof users.$inferSelect;
 
 export const orderWithFilesSchema = z.object({
   id: z.string(),
   userId: z.string(),
   sheetCount: z.number(),
   totalPriceSar: z.number(),
-  status: z.enum(["pending", "paid", "uploaded", "processing", "complete"]),
+  status: z.enum(["pending", "paid", "uploaded", "processing", "complete", "expired", "cancelled"]),
   moyasarPaymentId: z.string().nullable(),
   moyasarInvoiceId: z.string().nullable(),
   notes: z.string().nullable(),
@@ -146,7 +232,7 @@ export const balanceTransactions = pgTable("balance_transactions", {
   type: varchar("type").notNull(), // 'topup' | 'debit' | 'refund_request' | 'refund_approved'
   amountSar: integer("amount_sar").notNull(), // Positive for credit, negative for debit
   orderId: varchar("order_id").references(() => orders.id),
-  moyasarPaymentId: varchar("moyasar_payment_id"),
+  moyasarPaymentId: varchar("moyasar_payment_id").unique(), // Unique for webhook idempotency
   status: varchar("status").notNull().default("completed"), // 'pending' | 'completed' | 'rejected'
   note: text("note"),
   approvedBy: varchar("approved_by").references(() => users.id),

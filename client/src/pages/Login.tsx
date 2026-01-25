@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient, setAuthToken } from "@/lib/queryClient";
 import { Link, useLocation } from "wouter";
 import { Loader2, ArrowLeft } from "lucide-react";
 
@@ -22,13 +22,19 @@ export default function Login() {
     setIsLoading(true);
 
     try {
-      await apiRequest("POST", "/api/auth/web-login", {
+      const response = await apiRequest("POST", "/api/auth/web-login", {
         email: formData.email,
         password: formData.password,
       });
 
+      // Store the Bearer token for Workers API authentication
+      const data = await response.json();
+      if (data.token) {
+        setAuthToken(data.token);
+      }
+
       await queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
-      
+
       toast({
         title: "Welcome back",
         description: "You have been signed in successfully.",
@@ -54,7 +60,7 @@ export default function Login() {
           Back to home
         </Link>
       </div>
-      
+
       <div className="flex-1 flex items-center justify-center px-4">
         <Card className="w-full max-w-md bg-zinc-900 border-zinc-800">
           <CardHeader className="text-center pb-2">
@@ -79,12 +85,12 @@ export default function Login() {
                   data-testid="input-email"
                 />
               </div>
-              
+
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <Label htmlFor="password" className="text-zinc-300">Password</Label>
-                  <Link 
-                    href="/forgot-password" 
+                  <Link
+                    href="/forgot-password"
                     className="text-sm text-amber-500 hover:text-amber-400"
                     data-testid="link-forgot-password"
                   >

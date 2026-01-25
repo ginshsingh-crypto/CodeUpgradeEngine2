@@ -1,8 +1,7 @@
 
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { queryClient } from "@/lib/queryClient";
-import { useAuth } from "@/hooks/useAuth";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
     Card,
     CardContent,
@@ -25,7 +24,6 @@ import { useToast } from "@/components/ui/use-toast";
 import { Plus, Trash2, Users } from "lucide-react";
 
 export default function CompanyManagement() {
-    const { user } = useAuth();
     const { toast } = useToast();
     const [newCompanyName, setNewCompanyName] = useState("");
     const [inviteEmail, setInviteEmail] = useState("");
@@ -45,12 +43,7 @@ export default function CompanyManagement() {
 
     const createCompanyMutation = useMutation({
         mutationFn: async (name: string) => {
-            const res = await fetch("/api/companies", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name }),
-            });
-            if (!res.ok) throw new Error(await res.text());
+            const res = await apiRequest("POST", "/api/companies", { name });
             return res.json();
         },
         onSuccess: () => {
@@ -67,8 +60,7 @@ export default function CompanyManagement() {
         queryKey: ["/api/companies", selectedCompanyId, "members"],
         queryFn: async () => {
             if (!selectedCompanyId) return [];
-            const res = await fetch(`/api/companies/${selectedCompanyId}/members`);
-            if (!res.ok) throw new Error("Failed to fetch members");
+            const res = await apiRequest("GET", `/api/companies/${selectedCompanyId}/members`);
             return res.json();
         },
         enabled: !!selectedCompanyId
@@ -76,14 +68,11 @@ export default function CompanyManagement() {
 
     const addMemberMutation = useMutation({
         mutationFn: async ({ companyId, email }: { companyId: string; email: string }) => {
-            const res = await fetch(`/api/companies/${companyId}/members`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email, role: "member" }),
+            const res = await apiRequest("POST", `/api/companies/${companyId}/members`, {
+                email,
+                role: "member",
             });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.message || "Failed to add member");
-            return data;
+            return res.json();
         },
         onSuccess: () => {
             refetchMembers();
@@ -97,10 +86,7 @@ export default function CompanyManagement() {
 
     const removeMemberMutation = useMutation({
         mutationFn: async ({ companyId, userId }: { companyId: string, userId: string }) => {
-            const res = await fetch(`/api/companies/${companyId}/members/${userId}`, {
-                method: "DELETE"
-            });
-            if (!res.ok) throw new Error("Failed to remove member");
+            await apiRequest("DELETE", `/api/companies/${companyId}/members/${userId}`);
         },
         onSuccess: () => {
             refetchMembers();

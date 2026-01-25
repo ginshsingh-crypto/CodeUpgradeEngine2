@@ -38,17 +38,21 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
         }
     }, [selectedCompanyId]);
 
+    const personalBalance = balanceData?.personal?.balanceSar || 0;
+    const currentBalance = selectedCompany ? selectedCompany.balanceSar : personalBalance;
+
     return (
-        selectedCompany,
-        isLoading,
-        companies,
-        personalBalance: balanceData?.personal || 0,
-            // Helper to get currently active balance (personal or company)
-            currentBalance: selectedCompany ? selectedCompany.balanceSar : (balanceData?.personal || 0),
-            }}
-        >
-    { children }
-        </CompanyContext.Provider >
+        <CompanyContext.Provider value={{
+            selectedCompanyId,
+            setSelectedCompanyId,
+            selectedCompany,
+            isLoading,
+            companies,
+            personalBalance,
+            currentBalance
+        }}>
+            {children}
+        </CompanyContext.Provider>
     );
 }
 
