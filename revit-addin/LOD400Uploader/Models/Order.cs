@@ -108,14 +108,27 @@ namespace LOD400Uploader.Models
 
     public class UploadUrlResponse
     {
+        [JsonProperty("uploadUrl")]
+        public string UploadUrl { get; set; }
+
+        [JsonProperty("storageKey")]
+        public string StorageKey { get; set; }
+
+        [JsonProperty("expiresAt")]
+        public string ExpiresAt { get; set; }
+
+        // Backwards compat - some old responses use uploadURL
         [JsonProperty("uploadURL")]
-        public string UploadURL { get; set; }
+        public string UploadURL { get => UploadUrl; set => UploadUrl = value; }
     }
 
     public class DownloadUrlResponse
     {
+        [JsonProperty("downloadUrl")]
+        public string DownloadUrl { get; set; }
+
         [JsonProperty("downloadURL")]
-        public string DownloadURL { get; set; }
+        public string DownloadURL { get => DownloadUrl; set => DownloadUrl = value; }
 
         [JsonProperty("fileName")]
         public string FileName { get; set; }
@@ -129,17 +142,35 @@ namespace LOD400Uploader.Models
         [JsonProperty("fileSize")]
         public long FileSize { get; set; }
 
-        [JsonProperty("uploadURL")]
-        public string UploadURL { get; set; }
+        [JsonProperty("storageKey")]
+        public string StorageKey { get; set; }
     }
 
     public class ResumableUploadResponse
     {
+        [JsonProperty("uploadId")]
+        public string UploadId { get; set; }
+
         [JsonProperty("sessionUri")]
-        public string SessionUri { get; set; }
+        public string SessionUri { get => UploadId; set => UploadId = value; }
 
         [JsonProperty("storageKey")]
         public string StorageKey { get; set; }
+
+        [JsonProperty("partSize")]
+        public long PartSize { get; set; }
+    }
+
+    public class UploadedPart
+    {
+        [JsonProperty("partNumber")]
+        public int PartNumber { get; set; }
+
+        [JsonProperty("eTag")]
+        public string ETag { get; set; }
+
+        [JsonProperty("size")]
+        public long? Size { get; set; }
     }
 
     public class ResumableUploadStatus
@@ -149,6 +180,9 @@ namespace LOD400Uploader.Models
 
         [JsonProperty("isComplete")]
         public bool IsComplete { get; set; }
+
+        [JsonProperty("parts")]
+        public List<UploadedPart> Parts { get; set; }
     }
 
     /// <summary>
@@ -169,10 +203,19 @@ namespace LOD400Uploader.Models
         public long FileSize { get; set; }
 
         [JsonProperty("sessionUri")]
-        public string SessionUri { get; set; }
+        public string SessionUri { get => UploadId; set => UploadId = value; }
+
+        [JsonProperty("uploadId")]
+        public string UploadId { get; set; }
 
         [JsonProperty("storageKey")]
         public string StorageKey { get; set; }
+
+        [JsonProperty("partSize")]
+        public long PartSize { get; set; }
+
+        [JsonProperty("uploadedParts")]
+        public List<UploadedPart> UploadedParts { get; set; } = new List<UploadedPart>();
 
         [JsonProperty("bytesUploaded")]
         public long BytesUploaded { get; set; }

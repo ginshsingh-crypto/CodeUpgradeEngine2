@@ -31,6 +31,15 @@ namespace LOD400Uploader.Views
         {
             try
             {
+                // Try Windows Credential Manager first (secure storage)
+                string credEmail = CredentialService.LoadEmail();
+                if (!string.IsNullOrEmpty(credEmail))
+                {
+                    EmailTextBox.Text = credEmail;
+                    return;
+                }
+
+                // Fallback to file-based config for backward compatibility
                 if (File.Exists(ConfigPath))
                 {
                     var json = File.ReadAllText(ConfigPath);
@@ -49,6 +58,24 @@ namespace LOD400Uploader.Views
         }
 
         private void SaveSession(string sessionToken, string email)
+        {
+            try
+            {
+                // Use Windows Credential Manager for secure storage (instead of plaintext JSON)
+                // This protects tokens on shared workstations
+                if (!CredentialService.SaveToken(sessionToken, email))
+                {
+                    // Fallback to file-based storage if Credential Manager fails
+                    SaveSessionToFile(sessionToken, email);
+                }
+            }
+            catch
+            {
+                // Silent fail - user can still use the app for this session
+            }
+        }
+
+        private void SaveSessionToFile(string sessionToken, string email)
         {
             try
             {
@@ -77,9 +104,10 @@ namespace LOD400Uploader.Views
                     config = new Newtonsoft.Json.Linq.JObject();
                 }
 
-                // Update session and email, preserving other fields
-                config["sessionToken"] = sessionToken;
+                // Update email only (token stored in Credential Manager)
                 config["email"] = email;
+                // Remove token from file if it exists (migrating to secure storage)
+                config.Remove("sessionToken");
                 
                 File.WriteAllText(ConfigPath, config.ToString());
             }

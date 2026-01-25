@@ -539,9 +539,15 @@ namespace LOD400Uploader.Views
                 var existingSession = sessionManager.GetExistingSession(orderId, packagePath, fileSize);
                 ResumableUploadSession session;
 
-                if (existingSession != null)
+                if (existingSession != null &&
+                    !string.IsNullOrEmpty(existingSession.UploadId) &&
+                    !existingSession.UploadId.StartsWith("http", StringComparison.OrdinalIgnoreCase))
                 {
-                    var status = await _apiService.CheckResumableUploadStatusAsync(existingSession.SessionUri);
+                    var status = await _apiService.CheckResumableUploadStatusAsync(
+                        orderId,
+                        existingSession.UploadId,
+                        existingSession.StorageKey,
+                        fileSize);
                     if (status.IsComplete)
                     {
                         await _apiService.MarkUploadCompleteAsync(orderId, fileName, fileSize, existingSession.StorageKey);
@@ -553,6 +559,7 @@ namespace LOD400Uploader.Views
                     {
                         session = existingSession;
                         session.BytesUploaded = status.BytesUploaded;
+                        session.UploadedParts = status.Parts ?? session.UploadedParts ?? new List<UploadedPart>();
                         sessionManager.SaveSession(session);
                         int resumePercent = fileSize > 0 ? (int)((status.BytesUploaded * 100) / fileSize) : 0;
                         progressCallback?.Invoke(resumePercent, $"Resuming from {resumePercent}%...");
@@ -566,6 +573,11 @@ namespace LOD400Uploader.Views
                 }
                 else
                 {
+                    if (existingSession != null)
+                    {
+                        // Old-style session (pre-multipart) - discard and start fresh
+                        sessionManager.RemoveSession(existingSession);
+                    }
                     session = await _apiService.InitiateResumableUploadAsync(orderId, fileName, fileSize);
                     session.FilePath = packagePath;
                     sessionManager.SaveSession(session);
@@ -586,14 +598,15 @@ namespace LOD400Uploader.Views
             else
             {
                 // Use simple upload for smaller files
-                string uploadUrl = await _apiService.GetUploadUrlAsync(orderId, fileName);
+                // New flow: get presigned URL + storageKey, upload directly to R2, then confirm
+                var uploadInfo = await _apiService.GetUploadUrlAsync(orderId, fileName);
                 cancellationToken.ThrowIfCancellationRequested();
 
-                await _apiService.UploadFileAsync(uploadUrl, packagePath, 
+                await _apiService.UploadFileAsync(uploadInfo.UploadUrl, packagePath, 
                     (progress) => progressCallback?.Invoke(progress, $"Uploading... {progress}%"),
                     cancellationToken);
 
-                await _apiService.MarkUploadCompleteAsync(orderId, fileName, fileSize, uploadUrl);
+                await _apiService.MarkUploadCompleteAsync(orderId, fileName, fileSize, uploadInfo.StorageKey);
             }
 
             progressCallback?.Invoke(100, "Upload complete!");

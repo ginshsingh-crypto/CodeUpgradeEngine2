@@ -8,6 +8,7 @@ using Newtonsoft.Json;
 using LOD400Uploader.Models;
 using System.Collections.Generic;
 using System.Net.Http.Headers;
+using System.Linq;
 
 namespace LOD400Uploader.Services
 {
@@ -177,7 +178,7 @@ namespace LOD400Uploader.Services
             throw new TimeoutException("Payment verification timed out. Please check your order status manually.");
         }
 
-        public async Task<string> GetUploadUrlAsync(string orderId, string fileName)
+        public async Task<UploadUrlResponse> GetUploadUrlAsync(string orderId, string fileName)
         {
             EnsureSession();
             var request = new { fileName = fileName };
@@ -188,18 +189,17 @@ namespace LOD400Uploader.Services
             response.EnsureSuccessStatusCode();
 
             var responseJson = await response.Content.ReadAsStringAsync();
-            var result = JsonConvert.DeserializeObject<UploadUrlResponse>(responseJson);
-            return result.UploadURL;
+            return JsonConvert.DeserializeObject<UploadUrlResponse>(responseJson);
         }
 
-        public async Task MarkUploadCompleteAsync(string orderId, string fileName, long fileSize, string uploadUrl)
+        public async Task MarkUploadCompleteAsync(string orderId, string fileName, long fileSize, string storageKey)
         {
             EnsureSession();
             var request = new UploadCompleteRequest
             {
                 FileName = fileName,
                 FileSize = fileSize,
-                UploadURL = uploadUrl
+                StorageKey = storageKey
             };
             var json = JsonConvert.SerializeObject(request);
             var content = new StringContent(json, Encoding.UTF8, "application/json");
@@ -275,7 +275,7 @@ namespace LOD400Uploader.Services
         }
 
         /// <summary>
-        /// Initiates a resumable upload session with the server.
+        /// Initiates a resumable (multipart) upload session with the server.
         /// </summary>
         public async Task<ResumableUploadSession> InitiateResumableUploadAsync(string orderId, string fileName, long fileSize)
         {
@@ -295,28 +295,61 @@ namespace LOD400Uploader.Services
                 OrderId = orderId,
                 FileName = fileName,
                 FileSize = fileSize,
-                SessionUri = result.SessionUri,
+                UploadId = result.UploadId,
                 StorageKey = result.StorageKey,
+                PartSize = result.PartSize > 0 ? result.PartSize : 8 * 1024 * 1024,
                 BytesUploaded = 0,
                 CreatedAt = DateTime.UtcNow
             };
         }
 
         /// <summary>
-        /// Checks the status of a resumable upload.
+        /// Checks the status of a resumable upload (multipart parts already uploaded).
         /// </summary>
-        public async Task<ResumableUploadStatus> CheckResumableUploadStatusAsync(string sessionUri)
+        public async Task<ResumableUploadStatus> CheckResumableUploadStatusAsync(string orderId, string uploadId, string storageKey, long fileSize)
         {
             EnsureSession();
-            var request = new { sessionUri };
+            var request = new { uploadId, storageKey, fileSize };
             var json = JsonConvert.SerializeObject(request);
             var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-            var response = await _httpClient.PostAsync($"{_baseUrl}/api/addin/resumable-upload-status", content);
+            var response = await _httpClient.PostAsync($"{_baseUrl}/api/addin/orders/{orderId}/resumable-upload-status", content);
             response.EnsureSuccessStatusCode();
 
             var responseJson = await response.Content.ReadAsStringAsync();
             return JsonConvert.DeserializeObject<ResumableUploadStatus>(responseJson);
+        }
+
+        /// <summary>
+        /// Get a presigned URL for a multipart part upload.
+        /// </summary>
+        private async Task<string> GetMultipartPartUploadUrlAsync(string orderId, string uploadId, string storageKey, int partNumber)
+        {
+            EnsureSession();
+            var request = new { uploadId, storageKey, partNumber };
+            var json = JsonConvert.SerializeObject(request);
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+            var response = await _httpClient.PostAsync($"{_baseUrl}/api/addin/orders/{orderId}/resumable-upload/part-url", content);
+            response.EnsureSuccessStatusCode();
+
+            var responseJson = await response.Content.ReadAsStringAsync();
+            var result = JsonConvert.DeserializeObject<dynamic>(responseJson);
+            return (string)result.uploadUrl;
+        }
+
+        /// <summary>
+        /// Complete a multipart upload after all parts are uploaded.
+        /// </summary>
+        private async Task CompleteResumableUploadAsync(string orderId, string uploadId, string storageKey, List<UploadedPart> parts)
+        {
+            EnsureSession();
+            var request = new { uploadId, storageKey, parts };
+            var json = JsonConvert.SerializeObject(request);
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+            var response = await _httpClient.PostAsync($"{_baseUrl}/api/addin/orders/{orderId}/resumable-upload/complete", content);
+            response.EnsureSuccessStatusCode();
         }
 
         /// <summary>
@@ -330,72 +363,91 @@ namespace LOD400Uploader.Services
             Action<ResumableUploadSession> saveSessionCallback,
             CancellationToken cancellationToken = default)
         {
-            const int ChunkSize = 8 * 1024 * 1024; // 8 MB chunks
-            
+            if (string.IsNullOrEmpty(session.UploadId))
+            {
+                throw new InvalidOperationException("Resumable upload session is missing UploadId.");
+            }
+
+            if (session.UploadedParts == null)
+            {
+                session.UploadedParts = new List<UploadedPart>();
+            }
+
             var fileInfo = new FileInfo(filePath);
             long totalBytes = fileInfo.Length;
-            long startByte = session.BytesUploaded;
 
-            // If we're resuming, check the actual bytes uploaded on GCS
-            if (startByte > 0)
+            long partSize = session.PartSize > 0 ? session.PartSize : 8 * 1024 * 1024;
+            if (partSize < 5 * 1024 * 1024) partSize = 5 * 1024 * 1024;
+
+            // Sync with server for resume
+            var status = await CheckResumableUploadStatusAsync(session.OrderId, session.UploadId, session.StorageKey, totalBytes);
+            if (status != null)
             {
-                var status = await CheckResumableUploadStatusAsync(session.SessionUri);
+                session.UploadedParts = status.Parts ?? new List<UploadedPart>();
+                session.BytesUploaded = status.BytesUploaded;
+                saveSessionCallback?.Invoke(session);
+
                 if (status.IsComplete)
                 {
                     progressCallback?.Invoke(100);
-                    return; // Already complete
-                }
-                if (status.BytesUploaded >= 0)
-                {
-                    startByte = status.BytesUploaded;
-                    session.BytesUploaded = startByte;
-                    saveSessionCallback?.Invoke(session);
+                    return;
                 }
             }
 
+            var uploadedMap = session.UploadedParts.ToDictionary(p => p.PartNumber, p => p.ETag);
+            int totalParts = (int)Math.Ceiling((double)totalBytes / partSize);
+
             // Report initial progress
-            int initialPercent = totalBytes > 0 ? (int)((startByte * 100) / totalBytes) : 0;
+            int initialPercent = totalBytes > 0 ? (int)((session.BytesUploaded * 100) / totalBytes) : 0;
             progressCallback?.Invoke(initialPercent);
 
             using (var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read))
             {
-                fileStream.Seek(startByte, SeekOrigin.Begin);
-                long bytesUploaded = startByte;
-                byte[] buffer = new byte[ChunkSize];
-
-                while (bytesUploaded < totalBytes)
+                for (int partNumber = 1; partNumber <= totalParts; partNumber++)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
 
-                    // Calculate chunk size (may be less than ChunkSize for last chunk)
-                    long remainingBytes = totalBytes - bytesUploaded;
-                    int currentChunkSize = (int)Math.Min(ChunkSize, remainingBytes);
+                    long partStart = (partNumber - 1) * partSize;
+                    long remaining = totalBytes - partStart;
+                    int currentPartSize = (int)Math.Min(partSize, remaining);
 
-                    // Read chunk into buffer
-                    int bytesRead = await ReadExactAsync(fileStream, buffer, currentChunkSize, cancellationToken);
+                    if (uploadedMap.ContainsKey(partNumber))
+                    {
+                        continue;
+                    }
+
+                    // Read part bytes
+                    fileStream.Seek(partStart, SeekOrigin.Begin);
+                    byte[] buffer = new byte[currentPartSize];
+                    int bytesRead = await ReadExactAsync(fileStream, buffer, currentPartSize, cancellationToken);
                     if (bytesRead == 0) break;
 
-                    // Upload chunk
-                    await UploadChunkAsync(
-                        session.SessionUri, 
-                        buffer, 
-                        bytesRead, 
-                        bytesUploaded, 
-                        totalBytes,
-                        cancellationToken);
+                    string uploadUrl = await GetMultipartPartUploadUrlAsync(session.OrderId, session.UploadId, session.StorageKey, partNumber);
+                    string etag = await UploadPartAsync(uploadUrl, buffer, bytesRead, cancellationToken);
 
-                    bytesUploaded += bytesRead;
-                    session.BytesUploaded = bytesUploaded;
+                    session.UploadedParts.Add(new UploadedPart
+                    {
+                        PartNumber = partNumber,
+                        ETag = etag,
+                        Size = bytesRead
+                    });
 
-                    // Report progress
-                    int percent = (int)((bytesUploaded * 100) / totalBytes);
+                    uploadedMap[partNumber] = etag;
+                    session.BytesUploaded += bytesRead;
+
+                    int percent = totalBytes > 0 ? (int)((session.BytesUploaded * 100) / totalBytes) : 0;
                     progressCallback?.Invoke(percent);
-
-                    // Save session state for resume capability
                     saveSessionCallback?.Invoke(session);
                 }
             }
 
+            // Complete multipart upload (parts must be sorted)
+            var partsForComplete = session.UploadedParts
+                .OrderBy(p => p.PartNumber)
+                .Select(p => new UploadedPart { PartNumber = p.PartNumber, ETag = p.ETag })
+                .ToList();
+
+            await CompleteResumableUploadAsync(session.OrderId, session.UploadId, session.StorageKey, partsForComplete);
             progressCallback?.Invoke(100);
         }
 
@@ -429,35 +481,36 @@ namespace LOD400Uploader.Services
             _authClient.Timeout = TimeSpan.FromSeconds(30);
         }
 
-        private async Task UploadChunkAsync(
-            string sessionUri, 
-            byte[] buffer, 
-            int bytesRead, 
-            long startByte, 
-            long totalBytes,
+        private async Task<string> UploadPartAsync(
+            string uploadUrl,
+            byte[] buffer,
+            int bytesRead,
             CancellationToken cancellationToken)
         {
-            // Reuse static HttpClient to prevent socket exhaustion
-            // Creating new HttpClient for each chunk can exhaust available ports
-            long endByte = startByte + bytesRead - 1;
-            var contentRange = $"bytes {startByte}-{endByte}/{totalBytes}";
-
-            var request = new HttpRequestMessage(HttpMethod.Put, sessionUri);
+            var request = new HttpRequestMessage(HttpMethod.Put, uploadUrl);
             request.Content = new ByteArrayContent(buffer, 0, bytesRead);
             request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/zip");
             request.Content.Headers.ContentLength = bytesRead;
-            request.Content.Headers.Add("Content-Range", contentRange);
 
             var response = await _chunkUploadClient.SendAsync(request, cancellationToken);
+            response.EnsureSuccessStatusCode();
 
-            // 200 or 201 = complete, 308 = incomplete but chunk accepted
-            if (response.StatusCode != System.Net.HttpStatusCode.OK &&
-                response.StatusCode != System.Net.HttpStatusCode.Created &&
-                (int)response.StatusCode != 308)
+            string etag = null;
+            if (response.Headers.ETag != null)
             {
-                var errorContent = await response.Content.ReadAsStringAsync();
-                throw new HttpRequestException($"Chunk upload failed: {response.StatusCode} - {errorContent}");
+                etag = response.Headers.ETag.Tag;
             }
+            else if (response.Headers.TryGetValues("ETag", out var values))
+            {
+                etag = values.FirstOrDefault();
+            }
+
+            if (string.IsNullOrEmpty(etag))
+            {
+                throw new HttpRequestException("Missing ETag from part upload response");
+            }
+
+            return etag;
         }
 
         private void EnsureSession()
