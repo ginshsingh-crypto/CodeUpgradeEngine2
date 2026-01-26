@@ -44,6 +44,17 @@ export function log(message: string, source = "express") {
   console.log(`${formattedTime} [${source}] ${message}`);
 }
 
+// Mask sensitive fields before logging (must be at module level for ES5 strict mode)
+function maskSensitiveFields(obj: any): any {
+  if (!obj || typeof obj !== 'object') return obj;
+  const masked = { ...obj };
+  const sensitiveKeys = ['token', 'passwordHash', 'signedUrl', 'url', 'downloadUrl', 'uploadUrl', 'apiKey', 'secret'];
+  for (const key of sensitiveKeys) {
+    if (key in masked) masked[key] = '[REDACTED]';
+  }
+  return masked;
+}
+
 
 (async () => {
   try {
@@ -97,17 +108,6 @@ export function log(message: string, source = "express") {
     );
 
     app.use(express.urlencoded({ extended: false }));
-
-    // Mask sensitive fields before logging
-    function maskSensitiveFields(obj: any): any {
-      if (!obj || typeof obj !== 'object') return obj;
-      const masked = { ...obj };
-      const sensitiveKeys = ['token', 'passwordHash', 'signedUrl', 'url', 'downloadUrl', 'uploadUrl', 'apiKey', 'secret'];
-      for (const key of sensitiveKeys) {
-        if (key in masked) masked[key] = '[REDACTED]';
-      }
-      return masked;
-    }
 
     app.use((req, res, next) => {
       const start = Date.now();
