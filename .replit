@@ -1,6 +1,7 @@
 modules = ["nodejs-20", "dotnet-7.0", "web", "python-3.12"]
 [agent]
 expertMode = true
+integrations = ["javascript_object_storage:2.0.0"]
 
 [nix]
 channel = "stable-25_05"
@@ -8,7 +9,9 @@ channel = "stable-25_05"
 [userenv]
 
 [userenv.shared]
-ADMIN_EMAIL = "admin@example.com"
+ADMIN_EMAIL = "newbimtech@gmail.com"
+TEST_MODE = "true"
+APP_URL = "https://94f87c71-506b-4ab6-9018-0b35ba879690-00-enp42b9el2d9.sisko.replit.dev"
 
 [workflows]
 runButton = "Project"
