@@ -1,0 +1,3 @@
+is_global = true
+build_property.RootNamespace = LOD400Uploader
+build_property.ProjectDir = /home/runner/workspace/revit-addin/LOD400Uploader/
