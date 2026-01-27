@@ -113,7 +113,8 @@ namespace LOD400Uploader
             }
             
             // Last resort: use the deployed Replit app URL
-            return "https://lod-400-delivery-platform.replit.app";
+            // UPDATE THIS to your actual production URL after publishing
+            return "https://94f87c71-506b-4ab6-9018-0b35ba879690-00-enp42b9el2d9.sisko.replit.dev";
         }
         
         public static void SaveApiUrl(string url)
