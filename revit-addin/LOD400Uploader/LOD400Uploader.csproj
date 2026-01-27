@@ -1,19 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <!-- Multi-target framework support:
-         - Revit 2022, 2023, 2024: .NET Framework 4.8
-         - Revit 2025+: .NET 8
-         Set RevitVersion property to build for specific version:
-         dotnet build /p:RevitVersion=2024 (uses net48)
-         dotnet build /p:RevitVersion=2025 (uses net8.0-windows)
-    -->
-    <RevitVersion Condition="'$(RevitVersion)' == ''">2024</RevitVersion>
-    
-    <!-- Select target framework based on Revit version -->
-    <TargetFramework Condition="'$(RevitVersion)' &lt; '2025'">net48</TargetFramework>
-    <TargetFramework Condition="'$(RevitVersion)' &gt;= '2025'">net8.0-windows</TargetFramework>
-    
+    <TargetFramework>net48</TargetFramework>
     <LangVersion>latest</LangVersion>
     <PlatformTarget>x64</PlatformTarget>
     <UseWPF>true</UseWPF>
@@ -28,41 +16,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Revit API references - Dynamically selected based on RevitVersion -->
-    <!-- Build with: dotnet build /p:RevitVersion=2022 (or 2023, 2024) -->
-    <Reference Include="RevitAPI">
-      <HintPath>C:\Program Files\Autodesk\Revit $(RevitVersion)\RevitAPI.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="RevitAPIUI">
-      <HintPath>C:\Program Files\Autodesk\Revit $(RevitVersion)\RevitAPIUI.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-  </ItemGroup>
-
-  <ItemGroup>
+    <!-- Revit API via NuGet - works without local Revit installation -->
+    <PackageReference Include="Autodesk.Revit.SDK.Refs" Version="2024.0.0" IncludeAssets="compile" PrivateAssets="all" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
-    <!-- ILRepack merges Newtonsoft.Json into main DLL to avoid conflicts with Revit's bundled version -->
-    <PackageReference Include="ILRepack.Lib.MSBuild.Task" Version="2.0.18.2" />
   </ItemGroup>
-
-  <!-- ILRepack: Merge Newtonsoft.Json into main assembly to avoid DLL Hell with Revit -->
-  <Target Name="ILRepack" AfterTargets="Build" Condition="Exists('$(OutputPath)Newtonsoft.Json.dll')">
-    <ItemGroup>
-      <InputAssemblies Include="$(OutputPath)$(AssemblyName).dll" />
-      <InputAssemblies Include="$(OutputPath)Newtonsoft.Json.dll" />
-      <LibraryPath Include="C:\Program Files\Autodesk\Revit $(RevitVersion)" />
-    </ItemGroup>
-    <ILRepack 
-      Parallel="true" 
-      Internalize="true" 
-      InputAssemblies="@(InputAssemblies)" 
-      LibraryPath="@(LibraryPath)"
-      TargetKind="Dll" 
-      OutputFile="$(OutputPath)$(AssemblyName).dll" />
-    <!-- Delete the now-merged Newtonsoft.Json.dll to prevent accidental copying -->
-    <Delete Files="$(OutputPath)Newtonsoft.Json.dll" />
-  </Target>
 
   <ItemGroup>
     <Reference Include="System.Net.Http" />
