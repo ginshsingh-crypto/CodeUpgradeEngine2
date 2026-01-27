@@ -3,6 +3,11 @@ import { Resend } from 'resend';
 
 let connectionSettings: any;
 
+function getAppUrl(): string {
+  return process.env.APP_URL || 
+    (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : '');
+}
+
 async function getCredentials() {
   const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
   const xReplitToken = process.env.REPL_IDENTITY
@@ -38,9 +43,16 @@ async function getCredentials() {
 // Access tokens expire, so a new client must be created each time.
 export async function getUncachableResendClient() {
   const { apiKey, fromEmail } = await getCredentials();
+  
+  // Use configured email if it's from a verified domain, otherwise use Resend's test sender
+  // Note: For production, set up a verified domain at https://resend.com/domains
+  const validFromEmail = fromEmail && !fromEmail.includes('gmail.com') && !fromEmail.includes('yahoo.com') && !fromEmail.includes('hotmail.com')
+    ? fromEmail
+    : 'LOD 400 Platform <onboarding@resend.dev>';
+  
   return {
     client: new Resend(apiKey),
-    fromEmail
+    fromEmail: validFromEmail
   };
 }
 
@@ -49,13 +61,13 @@ export async function sendWelcomeEmail(
   firstName?: string
 ): Promise<boolean> {
   try {
-    const { client } = await getUncachableResendClient();
+    const { client, fromEmail } = await getUncachableResendClient();
 
     const name = firstName || 'there';
-    const verifiedFromEmail = 'LOD 400 Platform <noreply@deepnewbim.com>';
+    const appUrl = getAppUrl();
 
     const { data, error } = await client.emails.send({
-      from: verifiedFromEmail,
+      from: fromEmail,
       to: toEmail,
       subject: 'Welcome to LOD 400 Platform!',
       html: `
@@ -86,7 +98,7 @@ export async function sendWelcomeEmail(
             </div>
             
             <div style="text-align: center; margin: 32px 0;">
-              <a href="${process.env.APP_URL || 'https://deepnewbim.com'}" style="display: inline-block; background: #d4a853; color: #000000; text-decoration: none; font-weight: 600; padding: 14px 32px; border-radius: 6px; font-size: 16px;">
+              <a href="${appUrl}" style="display: inline-block; background: #d4a853; color: #000000; text-decoration: none; font-weight: 600; padding: 14px 32px; border-radius: 6px; font-size: 16px;">
                 Go to Dashboard
               </a>
             </div>
@@ -124,11 +136,8 @@ export async function sendPasswordResetEmail(
 
     const name = firstName || 'there';
 
-    // Always use the verified deepnewbim.com domain
-    const verifiedFromEmail = 'LOD 400 Platform <noreply@deepnewbim.com>';
-
     const { data, error } = await client.emails.send({
-      from: verifiedFromEmail,
+      from: fromEmail,
       to: toEmail,
       subject: 'Reset Your Password - LOD 400 Platform',
       html: `
@@ -188,13 +197,13 @@ export async function sendOrderPaidEmail(
   firstName?: string
 ): Promise<boolean> {
   try {
-    const { client } = await getUncachableResendClient();
+    const { client, fromEmail } = await getUncachableResendClient();
 
     const name = firstName || 'there';
-    const verifiedFromEmail = 'LOD 400 Platform <noreply@deepnewbim.com>';
+    const appUrl = getAppUrl();
 
     const { data, error } = await client.emails.send({
-      from: verifiedFromEmail,
+      from: fromEmail,
       to: toEmail,
       subject: 'Payment Received - LOD 400 Platform',
       html: `
@@ -224,7 +233,7 @@ export async function sendOrderPaidEmail(
             </p>
             
             <div style="text-align: center; margin: 32px 0;">
-              <a href="${process.env.APP_URL || 'https://deepnewbim.com'}" style="display: inline-block; background: #d4a853; color: #000000; text-decoration: none; font-weight: 600; padding: 14px 32px; border-radius: 6px; font-size: 16px;">
+              <a href="${appUrl}" style="display: inline-block; background: #d4a853; color: #000000; text-decoration: none; font-weight: 600; padding: 14px 32px; border-radius: 6px; font-size: 16px;">
                 Go to Dashboard
               </a>
             </div>
@@ -254,23 +263,22 @@ export async function sendOrderPaidEmail(
 
 export async function sendContactFormEmail(
   fromName: string,
-  fromEmail: string,
+  fromEmailAddress: string,
   message: string
 ): Promise<boolean> {
   try {
-    const { client } = await getUncachableResendClient();
+    const { client, fromEmail } = await getUncachableResendClient();
 
     const adminEmail = process.env.ADMIN_EMAIL;
     if (!adminEmail) {
       console.error('ADMIN_EMAIL environment variable is not set');
       return false;
     }
-    const verifiedFromEmail = 'LOD 400 Platform <noreply@deepnewbim.com>';
 
     const { data, error } = await client.emails.send({
-      from: verifiedFromEmail,
+      from: fromEmail,
       to: adminEmail,
-      replyTo: fromEmail,
+      replyTo: fromEmailAddress,
       subject: `Contact Form: New message from ${fromName}`,
       html: `
         <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px;">
@@ -283,7 +291,7 @@ export async function sendContactFormEmail(
             
             <div style="background: #f9f9f9; border-radius: 6px; padding: 16px; margin: 16px 0;">
               <p style="color: #525252; font-size: 14px; margin: 0 0 8px;"><strong>From:</strong> ${fromName}</p>
-              <p style="color: #525252; font-size: 14px; margin: 0;"><strong>Email:</strong> ${fromEmail}</p>
+              <p style="color: #525252; font-size: 14px; margin: 0;"><strong>Email:</strong> ${fromEmailAddress}</p>
             </div>
             
             <h3 style="color: #1a1a1a; font-size: 16px; margin: 24px 0 12px;">Message:</h3>
@@ -325,13 +333,13 @@ export async function sendOrderCompleteEmail(
   firstName?: string
 ): Promise<boolean> {
   try {
-    const { client } = await getUncachableResendClient();
+    const { client, fromEmail } = await getUncachableResendClient();
 
     const name = firstName || 'there';
-    const verifiedFromEmail = 'LOD 400 Platform <noreply@deepnewbim.com>';
+    const appUrl = getAppUrl();
 
     const { data, error } = await client.emails.send({
-      from: verifiedFromEmail,
+      from: fromEmail,
       to: toEmail,
       subject: 'Your Shop Drawings Are Ready! - LOD 400 Platform',
       html: `
@@ -361,7 +369,7 @@ export async function sendOrderCompleteEmail(
             </p>
             
             <div style="text-align: center; margin: 32px 0;">
-              <a href="${process.env.APP_URL || 'https://deepnewbim.com'}" style="display: inline-block; background: #d4a853; color: #000000; text-decoration: none; font-weight: 600; padding: 14px 32px; border-radius: 6px; font-size: 16px;">
+              <a href="${appUrl}" style="display: inline-block; background: #d4a853; color: #000000; text-decoration: none; font-weight: 600; padding: 14px 32px; border-radius: 6px; font-size: 16px;">
                 Download Now
               </a>
             </div>
