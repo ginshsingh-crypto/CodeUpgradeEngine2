@@ -58,10 +58,11 @@ namespace LOD400Uploader.Views
         {
             try
             {
-                if (!CredentialService.SaveToken(sessionToken, email))
-                {
-                    SaveSessionToFile(sessionToken, email);
-                }
+                // Always save to file (ApiService loads from here)
+                SaveSessionToFile(sessionToken, email);
+                
+                // Also try to save to Windows Credential Manager as backup
+                try { CredentialService.SaveToken(sessionToken, email); } catch { }
             }
             catch
             {
