@@ -169,7 +169,7 @@ namespace LOD400Uploader.Services
                             failuresAccessor.DeleteWarning(failure);
                         }
                     }
-                    e.SetProcessingResult(Autodesk.Revit.DB.Events.FailureProcessingResult.Continue);
+                    e.SetProcessingResult(FailureProcessingResult.Continue);
                 };
                 app.FailuresProcessing += failuresHandler;
                 
