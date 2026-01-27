@@ -17,7 +17,7 @@
 
   <ItemGroup>
     <!-- Revit API via NuGet - works without local Revit installation -->
-    <PackageReference Include="Autodesk.Revit.SDK.Refs" Version="2024.0.0" IncludeAssets="compile" PrivateAssets="all" />
+    <PackageReference Include="Revit_API_x64" Version="2024.0.2" PrivateAssets="all" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
   </ItemGroup>
 
