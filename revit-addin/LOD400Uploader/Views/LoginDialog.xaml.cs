@@ -1,8 +1,6 @@
 using System;
-using System.Diagnostics;
 using System.IO;
 using System.Windows;
-using System.Windows.Input;
 using LOD400Uploader.Services;
 
 namespace LOD400Uploader.Views
@@ -10,6 +8,7 @@ namespace LOD400Uploader.Views
     public partial class LoginDialog : Window
     {
         private readonly ApiService _apiService;
+        private bool _isRegisterMode = false;
         private static readonly string ConfigPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "LOD400Uploader",
@@ -31,7 +30,6 @@ namespace LOD400Uploader.Views
         {
             try
             {
-                // Try Windows Credential Manager first (secure storage)
                 string credEmail = CredentialService.LoadEmail();
                 if (!string.IsNullOrEmpty(credEmail))
                 {
@@ -39,7 +37,6 @@ namespace LOD400Uploader.Views
                     return;
                 }
 
-                // Fallback to file-based config for backward compatibility
                 if (File.Exists(ConfigPath))
                 {
                     var json = File.ReadAllText(ConfigPath);
@@ -61,17 +58,13 @@ namespace LOD400Uploader.Views
         {
             try
             {
-                // Use Windows Credential Manager for secure storage (instead of plaintext JSON)
-                // This protects tokens on shared workstations
                 if (!CredentialService.SaveToken(sessionToken, email))
                 {
-                    // Fallback to file-based storage if Credential Manager fails
                     SaveSessionToFile(sessionToken, email);
                 }
             }
             catch
             {
-                // Silent fail - user can still use the app for this session
             }
         }
 
@@ -85,7 +78,6 @@ namespace LOD400Uploader.Views
                     Directory.CreateDirectory(dir);
                 }
 
-                // Load existing config to preserve other values (like apiUrl)
                 Newtonsoft.Json.Linq.JObject config;
                 if (File.Exists(ConfigPath))
                 {
@@ -104,9 +96,7 @@ namespace LOD400Uploader.Views
                     config = new Newtonsoft.Json.Linq.JObject();
                 }
 
-                // Update email only (token stored in Credential Manager)
                 config["email"] = email;
-                // Remove token from file if it exists (migrating to secure storage)
                 config.Remove("sessionToken");
                 
                 File.WriteAllText(ConfigPath, config.ToString());
@@ -116,7 +106,49 @@ namespace LOD400Uploader.Views
             }
         }
 
-        private async void LoginButton_Click(object sender, RoutedEventArgs e)
+        private void SignInTab_Click(object sender, RoutedEventArgs e)
+        {
+            _isRegisterMode = false;
+            SignInTab.Style = (Style)FindResource("TabButtonActive");
+            RegisterTab.Style = (Style)FindResource("TabButton");
+            SignInPanel.Visibility = Visibility.Visible;
+            RegisterPanel.Visibility = Visibility.Collapsed;
+            ActionButton.Content = "Sign In";
+            ClearMessages();
+        }
+
+        private void RegisterTab_Click(object sender, RoutedEventArgs e)
+        {
+            _isRegisterMode = true;
+            RegisterTab.Style = (Style)FindResource("TabButtonActive");
+            SignInTab.Style = (Style)FindResource("TabButton");
+            RegisterPanel.Visibility = Visibility.Visible;
+            SignInPanel.Visibility = Visibility.Collapsed;
+            ActionButton.Content = "Create Account";
+            ClearMessages();
+        }
+
+        private void ClearMessages()
+        {
+            ErrorText.Visibility = Visibility.Collapsed;
+            SuccessText.Visibility = Visibility.Collapsed;
+            RegErrorText.Visibility = Visibility.Collapsed;
+            RegSuccessText.Visibility = Visibility.Collapsed;
+        }
+
+        private async void ActionButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_isRegisterMode)
+            {
+                await DoRegister();
+            }
+            else
+            {
+                await DoLogin();
+            }
+        }
+
+        private async System.Threading.Tasks.Task DoLogin()
         {
             var email = EmailTextBox.Text?.Trim();
             var password = PasswordBox.Password;
@@ -133,9 +165,9 @@ namespace LOD400Uploader.Views
                 return;
             }
 
-            LoginButton.IsEnabled = false;
-            LoginButton.Content = "Signing in...";
-            ErrorText.Visibility = System.Windows.Visibility.Collapsed;
+            ActionButton.IsEnabled = false;
+            ActionButton.Content = "Signing in...";
+            ClearMessages();
 
             try
             {
@@ -151,7 +183,7 @@ namespace LOD400Uploader.Views
                 }
                 else
                 {
-                    ShowError(loginResult.ErrorMessage ?? "Invalid email or password. Please try again.");
+                    ShowError(loginResult.ErrorMessage ?? "Invalid email or password.");
                 }
             }
             catch (Exception ex)
@@ -160,62 +192,107 @@ namespace LOD400Uploader.Views
             }
             finally
             {
-                LoginButton.IsEnabled = true;
-                LoginButton.Content = "Sign In";
+                ActionButton.IsEnabled = true;
+                ActionButton.Content = "Sign In";
+            }
+        }
+
+        private async System.Threading.Tasks.Task DoRegister()
+        {
+            var email = RegEmailTextBox.Text?.Trim();
+            var company = CompanyTextBox.Text?.Trim();
+            var password = RegPasswordBox.Password;
+            var confirmPassword = ConfirmPasswordBox.Password;
+            
+            if (string.IsNullOrEmpty(email))
+            {
+                ShowRegError("Please enter your email address.");
+                return;
+            }
+
+            if (string.IsNullOrEmpty(password))
+            {
+                ShowRegError("Please enter a password.");
+                return;
+            }
+
+            if (password.Length < 6)
+            {
+                ShowRegError("Password must be at least 6 characters.");
+                return;
+            }
+
+            if (password != confirmPassword)
+            {
+                ShowRegError("Passwords do not match.");
+                return;
+            }
+
+            ActionButton.IsEnabled = false;
+            ActionButton.Content = "Creating account...";
+            ClearMessages();
+
+            try
+            {
+                var registerResult = await _apiService.RegisterAsync(email, password, company);
+                
+                if (registerResult.Success)
+                {
+                    ShowRegSuccess("Account created! You can now sign in.");
+                    
+                    EmailTextBox.Text = email;
+                    
+                    await System.Threading.Tasks.Task.Delay(1500);
+                    SignInTab_Click(null, null);
+                }
+                else
+                {
+                    ShowRegError(registerResult.ErrorMessage ?? "Registration failed.");
+                }
+            }
+            catch (Exception ex)
+            {
+                ShowRegError($"Connection failed: {ex.Message}");
+            }
+            finally
+            {
+                ActionButton.IsEnabled = true;
+                ActionButton.Content = "Create Account";
             }
         }
 
         private void ShowError(string message)
         {
             ErrorText.Text = message;
-            ErrorText.Visibility = System.Windows.Visibility.Visible;
+            ErrorText.Visibility = Visibility.Visible;
+            SuccessText.Visibility = Visibility.Collapsed;
+        }
+
+        private void ShowSuccess(string message)
+        {
+            SuccessText.Text = message;
+            SuccessText.Visibility = Visibility.Visible;
+            ErrorText.Visibility = Visibility.Collapsed;
+        }
+
+        private void ShowRegError(string message)
+        {
+            RegErrorText.Text = message;
+            RegErrorText.Visibility = Visibility.Visible;
+            RegSuccessText.Visibility = Visibility.Collapsed;
+        }
+
+        private void ShowRegSuccess(string message)
+        {
+            RegSuccessText.Text = message;
+            RegSuccessText.Visibility = Visibility.Visible;
+            RegErrorText.Visibility = Visibility.Collapsed;
         }
 
         private void CancelButton_Click(object sender, RoutedEventArgs e)
         {
             DialogResult = false;
             Close();
-        }
-
-        private void SignUpLink_MouseDown(object sender, MouseButtonEventArgs e)
-        {
-            try
-            {
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = App.ApiBaseUrl,
-                    UseShellExecute = true
-                });
-            }
-            catch
-            {
-            }
-        }
-
-        private void ForgotPasswordLink_MouseDown(object sender, MouseButtonEventArgs e)
-        {
-            try
-            {
-                MessageBox.Show(
-                    "To reset your add-in password:\n\n" +
-                    "1. Go to " + App.ApiBaseUrl + "\n" +
-                    "2. Sign in with your account\n" +
-                    "3. Go to Settings\n" +
-                    "4. Set a new password in the 'Add-in Login' section\n\n" +
-                    "The website will now open in your browser.",
-                    "Reset Add-in Password",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Information);
-                    
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = $"{App.ApiBaseUrl}/settings",
-                    UseShellExecute = true
-                });
-            }
-            catch
-            {
-            }
         }
     }
 }

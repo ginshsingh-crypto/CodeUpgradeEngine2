@@ -28,6 +28,12 @@ namespace LOD400Uploader.Services
         public string ErrorMessage { get; set; }
     }
 
+    public class RegisterResult
+    {
+        public bool Success { get; set; }
+        public string ErrorMessage { get; set; }
+    }
+
     public class ApiService
     {
         private readonly HttpClient _httpClient;
@@ -79,11 +85,45 @@ namespace LOD400Uploader.Services
 
         public bool HasSession => !string.IsNullOrEmpty(_sessionToken);
 
+        public async Task<RegisterResult> RegisterAsync(string email, string password, string companyName = null)
+        {
+            try
+            {
+                var registerRequest = new { email = email, password = password, companyName = companyName ?? "" };
+                var json = JsonConvert.SerializeObject(registerRequest);
+                var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+                var response = await _authClient.PostAsync($"{_baseUrl}/api/auth/register", content);
+                var responseJson = await response.Content.ReadAsStringAsync();
+
+                if (response.IsSuccessStatusCode)
+                {
+                    return new RegisterResult { Success = true };
+                }
+                else
+                {
+                    var error = JsonConvert.DeserializeObject<dynamic>(responseJson);
+                    return new RegisterResult
+                    {
+                        Success = false,
+                        ErrorMessage = error?.message ?? "Registration failed"
+                    };
+                }
+            }
+            catch (Exception ex)
+            {
+                return new RegisterResult
+                {
+                    Success = false,
+                    ErrorMessage = ex.Message
+                };
+            }
+        }
+
         public async Task<LoginResult> LoginAsync(string email, string password)
         {
             try
             {
-                // Uses static _authClient to prevent socket exhaustion
                 var loginRequest = new { email = email, password = password, deviceLabel = "Revit Add-in" };
                 var json = JsonConvert.SerializeObject(loginRequest);
                 var content = new StringContent(json, Encoding.UTF8, "application/json");
