@@ -153,13 +153,37 @@ namespace LOD400Uploader.Services
                     openOptions.DetachFromCentralOption = DetachFromCentralOption.DetachAndPreserveWorksets;
                 }
                 
-                // CRITICAL: Set failures preprocessor to suppress warning dialogs
-                // Without this, warnings (missing fonts, corrupt elements, etc.) can show modal dialogs
-                // and freeze Revit forever since there's no user to click OK
-                openOptions.SetFailuresPreprocessor(new SuppressWarningsPreprocessor());
+                // Register failures processing event to suppress warning dialogs
+                // This approach works across all Revit versions (2022+)
+                var app = document.Application;
+                EventHandler<Autodesk.Revit.DB.Events.FailuresProcessingEventArgs> failuresHandler = null;
+                failuresHandler = (sender, e) =>
+                {
+                    var failuresAccessor = e.GetFailuresAccessor();
+                    var failures = failuresAccessor.GetFailureMessages();
+                    foreach (var failure in failures)
+                    {
+                        // Delete warnings, don't show dialogs
+                        if (failuresAccessor.GetSeverity() == FailureSeverity.Warning)
+                        {
+                            failuresAccessor.DeleteWarning(failure);
+                        }
+                    }
+                    e.SetProcessingResult(Autodesk.Revit.DB.Events.FailureProcessingResult.Continue);
+                };
+                app.FailuresProcessing += failuresHandler;
                 
-                // Open the copy in background (this does NOT affect the user's active document)
-                Document backgroundDoc = document.Application.OpenDocumentFile(modelPath, openOptions);
+                Document backgroundDoc;
+                try
+                {
+                    // Open the copy in background (this does NOT affect the user's active document)
+                    backgroundDoc = app.OpenDocumentFile(modelPath, openOptions);
+                }
+                finally
+                {
+                    // Always unregister the event handler
+                    app.FailuresProcessing -= failuresHandler;
+                }
                 
                 try
                 {
