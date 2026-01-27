@@ -29,28 +29,19 @@ namespace LOD400Uploader
                 string tabName = "LOD 400";
                 application.CreateRibbonTab(tabName);
 
-                RibbonPanel ribbonPanel = application.CreateRibbonPanel(tabName, "Upload");
+                RibbonPanel ribbonPanel = application.CreateRibbonPanel(tabName, "Shop Drawings");
 
                 string assemblyPath = Assembly.GetExecutingAssembly().Location;
 
                 PushButtonData uploadButtonData = new PushButtonData(
-                    "SelectSheets",
-                    "Upload\nSheets",
+                    "UploadModel",
+                    "Order Shop\nDrawings",
                     assemblyPath,
                     "LOD400Uploader.Commands.UploadSheetsCommand"
                 );
-                uploadButtonData.ToolTip = "Select sheets and upload for LOD 400 upgrade";
-
-                PushButtonData statusButtonData = new PushButtonData(
-                    "CheckStatus",
-                    "Check\nStatus",
-                    assemblyPath,
-                    "LOD400Uploader.Commands.CheckStatusCommand"
-                );
-                statusButtonData.ToolTip = "View order status and download deliverables";
+                uploadButtonData.ToolTip = "Select sheets and order professional shop drawings";
 
                 ribbonPanel.AddItem(uploadButtonData);
-                ribbonPanel.AddItem(statusButtonData);
 
                 return Result.Succeeded;
             }
