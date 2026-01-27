@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { setupAuth, isAuthenticated, isAdmin } from "./replitAuth";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import { createOrderRequestSchema, PRICE_PER_SHEET_SAR } from "@shared/schema";
-import { sendPasswordResetEmail, sendOrderPaidEmail, sendOrderCompleteEmail, sendContactFormEmail } from "./emailService";
+import { sendPasswordResetEmail, sendOrderPaidEmail, sendOrderCompleteEmail, sendContactFormEmail, sendWelcomeEmail } from "./emailService";
 import { validateUploadFile, MAX_FILE_SIZE_BYTES, getMaxFileSizeDisplay } from "./utils/fileValidation";
 import { validateZipFile } from "./utils/zipValidator";
 import bcrypt from "bcryptjs";
@@ -230,6 +230,11 @@ export async function registerRoutes(
 
       // Create user
       const user = await storage.createUserWithPassword(email, passwordHash, firstName, lastName);
+
+      // Send welcome email (async, don't wait)
+      sendWelcomeEmail(email, firstName).catch(err => {
+        console.error("Failed to send welcome email:", err);
+      });
 
       // Security: Regenerate session to prevent session fixation attacks
       req.session.regenerate((err) => {

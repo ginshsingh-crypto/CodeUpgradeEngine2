@@ -44,6 +44,76 @@ export async function getUncachableResendClient() {
   };
 }
 
+export async function sendWelcomeEmail(
+  toEmail: string,
+  firstName?: string
+): Promise<boolean> {
+  try {
+    const { client } = await getUncachableResendClient();
+
+    const name = firstName || 'there';
+    const verifiedFromEmail = 'LOD 400 Platform <noreply@deepnewbim.com>';
+
+    const { data, error } = await client.emails.send({
+      from: verifiedFromEmail,
+      to: toEmail,
+      subject: 'Welcome to LOD 400 Platform!',
+      html: `
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px;">
+          <div style="text-align: center; margin-bottom: 40px;">
+            <h1 style="color: #1a1a1a; font-size: 28px; margin: 0;">LOD 400 Platform</h1>
+          </div>
+          
+          <div style="background: #ffffff; border: 1px solid #e5e5e5; border-radius: 8px; padding: 32px;">
+            <h2 style="color: #1a1a1a; font-size: 20px; margin: 0 0 16px;">Welcome to LOD 400!</h2>
+            
+            <p style="color: #525252; font-size: 16px; line-height: 1.6; margin: 0 0 24px;">
+              Hi ${name},
+            </p>
+            
+            <p style="color: #525252; font-size: 16px; line-height: 1.6; margin: 0 0 16px;">
+              Your account has been created successfully! You can now use our professional shop drawings service.
+            </p>
+            
+            <div style="background: #f9f9f9; border-radius: 6px; padding: 16px; margin: 24px 0;">
+              <h3 style="color: #1a1a1a; font-size: 14px; margin: 0 0 12px;">How it works:</h3>
+              <ol style="color: #525252; font-size: 14px; line-height: 1.8; margin: 0; padding-left: 20px;">
+                <li>Open the LOD 400 add-in in Revit</li>
+                <li>Select sheets for shop drawings (150 SAR per sheet)</li>
+                <li>Upload your model</li>
+                <li>Receive professional shop drawings within 24 hours</li>
+              </ol>
+            </div>
+            
+            <div style="text-align: center; margin: 32px 0;">
+              <a href="${process.env.APP_URL || 'https://deepnewbim.com'}" style="display: inline-block; background: #d4a853; color: #000000; text-decoration: none; font-weight: 600; padding: 14px 32px; border-radius: 6px; font-size: 16px;">
+                Go to Dashboard
+              </a>
+            </div>
+          </div>
+          
+          <div style="text-align: center; margin-top: 32px;">
+            <p style="color: #a3a3a3; font-size: 12px; margin: 0;">
+              LOD 400 Delivery Platform - Professional BIM Model Upgrades
+            </p>
+          </div>
+        </div>
+      `,
+    });
+
+    if (error) {
+      console.error('Resend error:', error);
+      return false;
+    }
+
+    console.log(`Welcome email sent to ${toEmail}, id: ${data?.id}`);
+    return true;
+  } catch (error) {
+    console.error('Error sending welcome email:', error);
+    return false;
+  }
+}
+
 export async function sendPasswordResetEmail(
   toEmail: string,
   resetUrl: string,
