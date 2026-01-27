@@ -42,13 +42,10 @@ async function getCredentials() {
 // WARNING: Never cache this client.
 // Access tokens expire, so a new client must be created each time.
 export async function getUncachableResendClient() {
-  const { apiKey, fromEmail } = await getCredentials();
+  const { apiKey } = await getCredentials();
   
-  // Use configured email if it's from a verified domain, otherwise use Resend's test sender
-  // Note: For production, set up a verified domain at https://resend.com/domains
-  const validFromEmail = fromEmail && !fromEmail.includes('gmail.com') && !fromEmail.includes('yahoo.com') && !fromEmail.includes('hotmail.com')
-    ? fromEmail
-    : 'LOD 400 Platform <onboarding@resend.dev>';
+  // Use verified newbim.info domain
+  const validFromEmail = 'LOD 400 Platform <noreply@newbim.info>';
   
   return {
     client: new Resend(apiKey),
