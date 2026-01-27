@@ -97,7 +97,7 @@ namespace LOD400Uploader.Views
                 }
 
                 config["email"] = email;
-                config.Remove("sessionToken");
+                config["sessionToken"] = sessionToken;
                 
                 File.WriteAllText(ConfigPath, config.ToString());
             }
