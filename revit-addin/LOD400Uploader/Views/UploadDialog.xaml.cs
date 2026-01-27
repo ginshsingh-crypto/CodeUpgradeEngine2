@@ -61,6 +61,9 @@ namespace LOD400Uploader.Views
             _apiService = apiService ?? new ApiService();
             _packagingService = new PackagingService();
 
+            // Load saved session from config file
+            _apiService.LoadFromConfig();
+
             LoadSheets();
         }
 
