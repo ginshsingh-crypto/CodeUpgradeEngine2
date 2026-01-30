@@ -85,53 +85,55 @@
             <Button x:Name="RegisterTab" Content="Create Account" Style="{StaticResource TabButton}" Click="RegisterTab_Click"/>
         </StackPanel>
         
-        <Grid Grid.Row="2" Margin="0,16,0,0">
-            <StackPanel x:Name="SignInPanel">
-                <TextBlock Text="Email" FontSize="13" FontWeight="SemiBold" Foreground="#D1D5DB" Margin="0,0,0,8"/>
-                <TextBox x:Name="EmailTextBox" FontSize="14" Padding="12,10" 
-                         Background="#1F2937" Foreground="White" BorderBrush="#374151" BorderThickness="1"
-                         CaretBrush="White"/>
-                
-                <TextBlock Text="Password" FontSize="13" FontWeight="SemiBold" Foreground="#D1D5DB" Margin="0,16,0,8"/>
-                <PasswordBox x:Name="PasswordBox" FontSize="14" Padding="12,10" 
+        <ScrollViewer Grid.Row="2" Margin="0,16,0,0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <Grid>
+                <StackPanel x:Name="SignInPanel">
+                    <TextBlock Text="Email" FontSize="13" FontWeight="SemiBold" Foreground="#D1D5DB" Margin="0,0,0,8"/>
+                    <TextBox x:Name="EmailTextBox" FontSize="14" Padding="12,10" 
                              Background="#1F2937" Foreground="White" BorderBrush="#374151" BorderThickness="1"
                              CaretBrush="White"/>
+                    
+                    <TextBlock Text="Password" FontSize="13" FontWeight="SemiBold" Foreground="#D1D5DB" Margin="0,16,0,8"/>
+                    <PasswordBox x:Name="PasswordBox" FontSize="14" Padding="12,10" 
+                                 Background="#1F2937" Foreground="White" BorderBrush="#374151" BorderThickness="1"
+                                 CaretBrush="White"/>
+                    
+                    <TextBlock x:Name="ErrorText" Text="" FontSize="12" Foreground="#EF4444" Margin="0,12,0,0" 
+                               TextWrapping="Wrap" Visibility="Collapsed"/>
+                    
+                    <TextBlock x:Name="SuccessText" Text="" FontSize="12" Foreground="#10B981" Margin="0,12,0,0" 
+                               TextWrapping="Wrap" Visibility="Collapsed"/>
+                </StackPanel>
                 
-                <TextBlock x:Name="ErrorText" Text="" FontSize="12" Foreground="#EF4444" Margin="0,12,0,0" 
-                           TextWrapping="Wrap" Visibility="Collapsed"/>
-                
-                <TextBlock x:Name="SuccessText" Text="" FontSize="12" Foreground="#10B981" Margin="0,12,0,0" 
-                           TextWrapping="Wrap" Visibility="Collapsed"/>
-            </StackPanel>
-            
-            <StackPanel x:Name="RegisterPanel" Visibility="Collapsed">
-                <TextBlock Text="Email" FontSize="13" FontWeight="SemiBold" Foreground="#D1D5DB" Margin="0,0,0,8"/>
-                <TextBox x:Name="RegEmailTextBox" FontSize="14" Padding="12,10" 
-                         Background="#1F2937" Foreground="White" BorderBrush="#374151" BorderThickness="1"
-                         CaretBrush="White"/>
-                
-                <TextBlock Text="Company Name (Optional)" FontSize="13" FontWeight="SemiBold" Foreground="#D1D5DB" Margin="0,16,0,8"/>
-                <TextBox x:Name="CompanyTextBox" FontSize="14" Padding="12,10" 
-                         Background="#1F2937" Foreground="White" BorderBrush="#374151" BorderThickness="1"
-                         CaretBrush="White"/>
-                
-                <TextBlock Text="Password" FontSize="13" FontWeight="SemiBold" Foreground="#D1D5DB" Margin="0,16,0,8"/>
-                <PasswordBox x:Name="RegPasswordBox" FontSize="14" Padding="12,10" 
+                <StackPanel x:Name="RegisterPanel" Visibility="Collapsed">
+                    <TextBlock Text="Email" FontSize="13" FontWeight="SemiBold" Foreground="#D1D5DB" Margin="0,0,0,8"/>
+                    <TextBox x:Name="RegEmailTextBox" FontSize="14" Padding="12,10" 
                              Background="#1F2937" Foreground="White" BorderBrush="#374151" BorderThickness="1"
                              CaretBrush="White"/>
-                
-                <TextBlock Text="Confirm Password" FontSize="13" FontWeight="SemiBold" Foreground="#D1D5DB" Margin="0,16,0,8"/>
-                <PasswordBox x:Name="ConfirmPasswordBox" FontSize="14" Padding="12,10" 
+                    
+                    <TextBlock Text="Company Name (Optional)" FontSize="13" FontWeight="SemiBold" Foreground="#D1D5DB" Margin="0,16,0,8"/>
+                    <TextBox x:Name="CompanyTextBox" FontSize="14" Padding="12,10" 
                              Background="#1F2937" Foreground="White" BorderBrush="#374151" BorderThickness="1"
                              CaretBrush="White"/>
-                
-                <TextBlock x:Name="RegErrorText" Text="" FontSize="12" Foreground="#EF4444" Margin="0,12,0,0" 
-                           TextWrapping="Wrap" Visibility="Collapsed"/>
-                
-                <TextBlock x:Name="RegSuccessText" Text="" FontSize="12" Foreground="#10B981" Margin="0,12,0,0" 
-                           TextWrapping="Wrap" Visibility="Collapsed"/>
-            </StackPanel>
-        </Grid>
+                    
+                    <TextBlock Text="Password" FontSize="13" FontWeight="SemiBold" Foreground="#D1D5DB" Margin="0,16,0,8"/>
+                    <PasswordBox x:Name="RegPasswordBox" FontSize="14" Padding="12,10" 
+                                 Background="#1F2937" Foreground="White" BorderBrush="#374151" BorderThickness="1"
+                                 CaretBrush="White"/>
+                    
+                    <TextBlock Text="Confirm Password" FontSize="13" FontWeight="SemiBold" Foreground="#D1D5DB" Margin="0,16,0,8"/>
+                    <PasswordBox x:Name="ConfirmPasswordBox" FontSize="14" Padding="12,10" 
+                                 Background="#1F2937" Foreground="White" BorderBrush="#374151" BorderThickness="1"
+                                 CaretBrush="White"/>
+                    
+                    <TextBlock x:Name="RegErrorText" Text="" FontSize="12" Foreground="#EF4444" Margin="0,12,0,16" 
+                               TextWrapping="Wrap" Visibility="Collapsed"/>
+                    
+                    <TextBlock x:Name="RegSuccessText" Text="" FontSize="12" Foreground="#10B981" Margin="0,12,0,16" 
+                               TextWrapping="Wrap" Visibility="Collapsed"/>
+                </StackPanel>
+            </Grid>
+        </ScrollViewer>
         
         <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right">
             <Button Content="Cancel" Padding="16,10" Background="Transparent" Foreground="#D1D5DB"
