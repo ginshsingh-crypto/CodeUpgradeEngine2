@@ -175,18 +175,20 @@ namespace LOD400Uploader.Services
                     saveOptions.OverwriteExistingFile = true;
                     saveOptions.MaximumBackups = 1;
                     
-                    // For workshared models: Mark as non-workshared for the copy
-                    if (isWorkshared && !isCloudModel)
+                    // For workshared models (including cloud): Mark as non-workshared for the copy
+                    if (isWorkshared)
                     {
                         WorksharingSaveAsOptions wsOptions = new WorksharingSaveAsOptions();
                         wsOptions.SaveAsCentral = false;
                         saveOptions.SetWorksharingOptions(wsOptions);
                     }
                     
+                    // For cloud models, save a local copy - Revit handles this automatically
+                    // Note: This changes the active document's path to the temp location temporarily
                     workingDoc.SaveAs(data.ModelCopyPath, saveOptions);
                     
-                    // For cloud models, revert back to the cloud path after SaveAs
-                    // This is handled by Revit automatically for cloud documents
+                    // For cloud models: After SaveAs, the document path changed to temp
+                    // We'll handle this by noting the original path was cloud-based
                     
                     progressCallback?.Invoke(40, "Collecting link information...");
                     

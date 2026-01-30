@@ -26,6 +26,9 @@ namespace LOD400Uploader.Views
         
         // Flag to indicate if we're currently in the upload phase (after packaging)
         private bool _isUploading = false;
+        
+        // Flag to track if original model was cloud-based (for user notification)
+        private bool _isCloudModel = false;
 
         // P/Invoke for getting system memory info (works on .NET Framework 4.8)
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
@@ -306,6 +309,12 @@ namespace LOD400Uploader.Views
 
                 ProgressText.Text = "Creating order...";
                 ProgressBar.Value = 5;
+                
+                // Detect if this is a cloud model (BIM 360/ACC) for user notification
+                string docPath = _document.PathName ?? "";
+                _isCloudModel = docPath.StartsWith("BIM 360://", StringComparison.OrdinalIgnoreCase) ||
+                               docPath.StartsWith("autodesk.docs://", StringComparison.OrdinalIgnoreCase) ||
+                               docPath.StartsWith("ACC://", StringComparison.OrdinalIgnoreCase);
 
                 // Convert selected sheets to SheetInfo for server storage
                 var sheetInfoList = selectedSheets.Select(s => new SheetInfo
@@ -470,12 +479,16 @@ namespace LOD400Uploader.Views
                     // Success - cleanup and close
                     _packagingService.Cleanup(localPackagePath);
                     
-                    MessageBox.Show(
-                        $"Upload complete!\n\nOrder: {orderId}\nSheets: {sheetCount}\n\n" +
-                        "You will be notified when your LOD 400 model is ready.",
-                        "Success",
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Information);
+                    string successMessage = $"Upload complete!\n\nOrder: {orderId}\nSheets: {sheetCount}\n\n" +
+                        "You will be notified when your LOD 400 model is ready.";
+                    
+                    // For cloud models, add note about reopening
+                    if (_isCloudModel)
+                    {
+                        successMessage += "\n\nNote: Please close and reopen your cloud model from BIM 360/ACC to continue working.";
+                    }
+                    
+                    MessageBox.Show(successMessage, "Success", MessageBoxButton.OK, MessageBoxImage.Information);
                     
                     Close();
                 }
