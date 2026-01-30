@@ -70,40 +70,20 @@ namespace LOD400Uploader.Services
 
             string originalPath = document.PathName;
             
-            // Handle unsaved documents - save to temp location first
-            if (string.IsNullOrEmpty(originalPath) || !File.Exists(originalPath))
+            // Handle unsaved documents - require user to save first
+            // We can't auto-save because that would change their working file location
+            if (string.IsNullOrEmpty(originalPath))
             {
-                progressCallback?.Invoke(6, "Saving model to temporary location...");
-                
-                // Create temp directory for unsaved models
-                string tempDir = Path.Combine(Path.GetTempPath(), "LOD400Uploader", "TempModels");
-                if (!Directory.Exists(tempDir))
-                {
-                    Directory.CreateDirectory(tempDir);
-                }
-                
-                // Generate a unique filename
-                string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-                string tempFileName = $"UnsavedModel_{timestamp}.rvt";
-                string tempPath = Path.Combine(tempDir, tempFileName);
-                
-                try
-                {
-                    // Save the document to temp location
-                    var saveOptions = new SaveAsOptions
-                    {
-                        OverwriteExistingFile = true,
-                        Compact = false
-                    };
-                    document.SaveAs(tempPath, saveOptions);
-                    originalPath = tempPath;
-                    
-                    progressCallback?.Invoke(8, "Model saved, continuing...");
-                }
-                catch (Exception ex)
-                {
-                    throw new InvalidOperationException($"Failed to save model: {ex.Message}. Please save your Revit model manually first.");
-                }
+                throw new InvalidOperationException("Please save your model first (File > Save As), then try uploading again.");
+            }
+            
+            // For local files that don't exist on disk yet
+            if (!originalPath.StartsWith("BIM 360://", StringComparison.OrdinalIgnoreCase) &&
+                !originalPath.StartsWith("autodesk.docs://", StringComparison.OrdinalIgnoreCase) &&
+                !originalPath.StartsWith("ACC://", StringComparison.OrdinalIgnoreCase) &&
+                !File.Exists(originalPath))
+            {
+                throw new InvalidOperationException("Model file not found. Please save your model first.");
             }
 
             // Check for BIM 360/ACC cloud models - handled automatically
