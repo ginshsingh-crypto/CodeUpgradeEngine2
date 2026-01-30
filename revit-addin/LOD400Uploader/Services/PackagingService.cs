@@ -148,8 +148,23 @@ namespace LOD400Uploader.Services
                     openOptions.DetachFromCentralOption = DetachFromCentralOption.DetachAndPreserveWorksets;
                 }
                 
-                // Open the copy in background (this does NOT affect the user's active document)
-                Document backgroundDoc = document.Application.OpenDocumentFile(modelPath, openOptions);
+                // For cloud models, we can't open a second copy - use the active document directly
+                // For workshared local models, open a detached copy
+                Document workingDoc;
+                bool needToCloseWorkingDoc = false;
+                
+                if (isCloudModel)
+                {
+                    // Cloud models: Use the active document, save a copy to temp
+                    workingDoc = document;
+                    needToCloseWorkingDoc = false;
+                }
+                else
+                {
+                    // Local workshared: Open a detached copy in background
+                    workingDoc = document.Application.OpenDocumentFile(modelPath, openOptions);
+                    needToCloseWorkingDoc = (workingDoc != document); // Only close if it's a different doc
+                }
                 
                 try
                 {
@@ -161,14 +176,17 @@ namespace LOD400Uploader.Services
                     saveOptions.MaximumBackups = 1;
                     
                     // For workshared models: Mark as non-workshared for the copy
-                    if (isWorkshared)
+                    if (isWorkshared && !isCloudModel)
                     {
                         WorksharingSaveAsOptions wsOptions = new WorksharingSaveAsOptions();
                         wsOptions.SaveAsCentral = false;
                         saveOptions.SetWorksharingOptions(wsOptions);
                     }
                     
-                    backgroundDoc.SaveAs(data.ModelCopyPath, saveOptions);
+                    workingDoc.SaveAs(data.ModelCopyPath, saveOptions);
+                    
+                    // For cloud models, revert back to the cloud path after SaveAs
+                    // This is handled by Revit automatically for cloud documents
                     
                     progressCallback?.Invoke(40, "Collecting link information...");
                     
@@ -184,13 +202,16 @@ namespace LOD400Uploader.Services
                     
                     progressCallback?.Invoke(60, "Preparing manifest...");
                     
-                    // Create manifest JSON from the background document (for sheet info)
-                    data.ManifestJson = CreateManifestJson(backgroundDoc, selectedSheetIds, data.LinksToCopy);
+                    // Create manifest JSON from the working document (for sheet info)
+                    data.ManifestJson = CreateManifestJson(workingDoc, selectedSheetIds, data.LinksToCopy);
                 }
                 finally
                 {
-                    // CRITICAL: Close the background document so we can ZIP it later
-                    backgroundDoc.Close(false);
+                    // Only close if we opened a separate background document
+                    if (needToCloseWorkingDoc && workingDoc != null)
+                    {
+                        workingDoc.Close(false);
+                    }
                 }
             }
             else
