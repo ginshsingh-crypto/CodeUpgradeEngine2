@@ -69,9 +69,41 @@ namespace LOD400Uploader.Services
             progressCallback?.Invoke(5, "Validating model...");
 
             string originalPath = document.PathName;
+            
+            // Handle unsaved documents - save to temp location first
             if (string.IsNullOrEmpty(originalPath) || !File.Exists(originalPath))
             {
-                throw new InvalidOperationException("The model must be saved to a file before uploading. Please save your Revit model first.");
+                progressCallback?.Invoke(6, "Saving model to temporary location...");
+                
+                // Create temp directory for unsaved models
+                string tempDir = Path.Combine(Path.GetTempPath(), "LOD400Uploader", "TempModels");
+                if (!Directory.Exists(tempDir))
+                {
+                    Directory.CreateDirectory(tempDir);
+                }
+                
+                // Generate a unique filename
+                string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+                string tempFileName = $"UnsavedModel_{timestamp}.rvt";
+                string tempPath = Path.Combine(tempDir, tempFileName);
+                
+                try
+                {
+                    // Save the document to temp location
+                    var saveOptions = new SaveAsOptions
+                    {
+                        OverwriteExistingFile = true,
+                        Compact = false
+                    };
+                    document.SaveAs(tempPath, saveOptions);
+                    originalPath = tempPath;
+                    
+                    progressCallback?.Invoke(8, "Model saved, continuing...");
+                }
+                catch (Exception ex)
+                {
+                    throw new InvalidOperationException($"Failed to save model: {ex.Message}. Please save your Revit model manually first.");
+                }
             }
 
             // Check for BIM 360/ACC cloud models - these require special handling
