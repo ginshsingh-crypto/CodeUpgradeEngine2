@@ -106,45 +106,28 @@ namespace LOD400Uploader.Services
                 }
             }
 
-            // Check for BIM 360/ACC cloud models - these require special handling
+            // Check for BIM 360/ACC cloud models - handled automatically
             // Cloud paths look like "BIM 360://..." or "autodesk.docs://..."
-            if (originalPath.StartsWith("BIM 360://", StringComparison.OrdinalIgnoreCase) ||
+            bool isCloudPath = originalPath.StartsWith("BIM 360://", StringComparison.OrdinalIgnoreCase) ||
                 originalPath.StartsWith("autodesk.docs://", StringComparison.OrdinalIgnoreCase) ||
-                originalPath.StartsWith("ACC://", StringComparison.OrdinalIgnoreCase))
+                originalPath.StartsWith("ACC://", StringComparison.OrdinalIgnoreCase);
+            
+            if (isCloudPath)
             {
-                var result = System.Windows.MessageBox.Show(
-                    "This model appears to be stored in BIM 360 or Autodesk Construction Cloud.\n\n" +
-                    "Cloud models may require additional steps:\n" +
-                    "1. Ensure you have a local cache of the model\n" +
-                    "2. Large models may take longer to package\n" +
-                    "3. Check your internet connection is stable\n\n" +
-                    "If upload fails, try creating a local copy first:\n" +
-                    "File > Save As > Local File (.rvt)\n\n" +
-                    "Do you want to continue anyway?",
-                    "Cloud Model Detected",
-                    System.Windows.MessageBoxButton.YesNo,
-                    System.Windows.MessageBoxImage.Warning);
-
-                if (result != System.Windows.MessageBoxResult.Yes)
-                {
-                    throw new OperationCanceledException("Upload cancelled by user.");
-                }
+                progressCallback?.Invoke(7, "Cloud model detected, preparing download...");
             }
 
-            // Warn about unsaved changes (but allow continuing)
-            if (document.IsModified)
+            // Auto-save if there are unsaved changes (for local files only, not cloud)
+            if (document.IsModified && !isCloudPath && File.Exists(originalPath))
             {
-                var result = System.Windows.MessageBox.Show(
-                    "Your model has unsaved changes.\n\n" +
-                    "Only the last saved version will be uploaded. Your unsaved changes will NOT be included.\n\n" +
-                    "Do you want to continue?",
-                    "Unsaved Changes",
-                    System.Windows.MessageBoxButton.YesNo,
-                    System.Windows.MessageBoxImage.Warning);
-
-                if (result != System.Windows.MessageBoxResult.Yes)
+                try
                 {
-                    throw new OperationCanceledException("Upload cancelled by user.");
+                    progressCallback?.Invoke(8, "Saving your changes...");
+                    document.Save();
+                }
+                catch
+                {
+                    // If save fails, continue with last saved version
                 }
             }
 
