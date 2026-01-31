@@ -184,22 +184,48 @@ namespace LOD400Uploader.Services
         public async Task<CreateOrderResponse> CreateOrderAsync(int sheetCount, List<SheetInfo> sheets = null)
         {
             EnsureSession();
-            var request = new CreateOrderRequest { SheetCount = sheetCount, Sheets = sheets ?? new List<SheetInfo>() };
-            var json = JsonConvert.SerializeObject(request);
-            var content = new StringContent(json, Encoding.UTF8, "application/json");
-
-            var response = await _httpClient.PostAsync($"{_baseUrl}/api/addin/create-order", content);
             
-            // Check for 401 Unauthorized specifically (expired token)
-            if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            const int maxRetries = 3;
+            Exception lastException = null;
+            
+            for (int attempt = 1; attempt <= maxRetries; attempt++)
             {
-                throw new ApiUnauthorizedException("Session expired. Please sign in again.");
+                try
+                {
+                    var request = new CreateOrderRequest { SheetCount = sheetCount, Sheets = sheets ?? new List<SheetInfo>() };
+                    var json = JsonConvert.SerializeObject(request);
+                    var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+                    var response = await _httpClient.PostAsync($"{_baseUrl}/api/addin/create-order", content);
+                    
+                    // Check for 401 Unauthorized specifically (expired token)
+                    if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+                    {
+                        throw new ApiUnauthorizedException("Session expired. Please sign in again.");
+                    }
+                    
+                    response.EnsureSuccessStatusCode();
+
+                    var responseJson = await response.Content.ReadAsStringAsync();
+                    return JsonConvert.DeserializeObject<CreateOrderResponse>(responseJson);
+                }
+                catch (ApiUnauthorizedException)
+                {
+                    throw; // Don't retry auth errors
+                }
+                catch (HttpRequestException ex) when (attempt < maxRetries)
+                {
+                    lastException = ex;
+                    await Task.Delay(TimeSpan.FromSeconds(Math.Pow(2, attempt - 1)));
+                }
+                catch (TaskCanceledException ex) when (attempt < maxRetries)
+                {
+                    lastException = ex;
+                    await Task.Delay(TimeSpan.FromSeconds(Math.Pow(2, attempt - 1)));
+                }
             }
             
-            response.EnsureSuccessStatusCode();
-
-            var responseJson = await response.Content.ReadAsStringAsync();
-            return JsonConvert.DeserializeObject<CreateOrderResponse>(responseJson);
+            throw new HttpRequestException($"Failed to create order after {maxRetries} attempts. Please check your connection.", lastException);
         }
 
         public async Task<Order> PollOrderStatusAsync(string orderId, int maxAttempts = 60, int delayMs = 2000)
@@ -221,31 +247,96 @@ namespace LOD400Uploader.Services
         public async Task<UploadUrlResponse> GetUploadUrlAsync(string orderId, string fileName)
         {
             EnsureSession();
-            var request = new { fileName = fileName };
-            var json = JsonConvert.SerializeObject(request);
-            var content = new StringContent(json, Encoding.UTF8, "application/json");
+            
+            const int maxRetries = 3;
+            Exception lastException = null;
+            
+            for (int attempt = 1; attempt <= maxRetries; attempt++)
+            {
+                try
+                {
+                    var request = new { fileName = fileName };
+                    var json = JsonConvert.SerializeObject(request);
+                    var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-            var response = await _httpClient.PostAsync($"{_baseUrl}/api/addin/orders/{orderId}/upload-url", content);
-            response.EnsureSuccessStatusCode();
+                    var response = await _httpClient.PostAsync($"{_baseUrl}/api/addin/orders/{orderId}/upload-url", content);
+                    
+                    if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+                    {
+                        throw new ApiUnauthorizedException("Session expired. Please sign in again.");
+                    }
+                    
+                    response.EnsureSuccessStatusCode();
 
-            var responseJson = await response.Content.ReadAsStringAsync();
-            return JsonConvert.DeserializeObject<UploadUrlResponse>(responseJson);
+                    var responseJson = await response.Content.ReadAsStringAsync();
+                    return JsonConvert.DeserializeObject<UploadUrlResponse>(responseJson);
+                }
+                catch (ApiUnauthorizedException)
+                {
+                    throw; // Don't retry auth errors
+                }
+                catch (HttpRequestException ex) when (attempt < maxRetries)
+                {
+                    lastException = ex;
+                    await Task.Delay(TimeSpan.FromSeconds(Math.Pow(2, attempt - 1)));
+                }
+                catch (TaskCanceledException ex) when (attempt < maxRetries)
+                {
+                    lastException = ex;
+                    await Task.Delay(TimeSpan.FromSeconds(Math.Pow(2, attempt - 1)));
+                }
+            }
+            
+            throw new HttpRequestException($"Failed to get upload URL after {maxRetries} attempts.", lastException);
         }
 
         public async Task MarkUploadCompleteAsync(string orderId, string fileName, long fileSize, string storageKey)
         {
             EnsureSession();
-            var request = new UploadCompleteRequest
+            
+            const int maxRetries = 3;
+            Exception lastException = null;
+            
+            for (int attempt = 1; attempt <= maxRetries; attempt++)
             {
-                FileName = fileName,
-                FileSize = fileSize,
-                StorageKey = storageKey
-            };
-            var json = JsonConvert.SerializeObject(request);
-            var content = new StringContent(json, Encoding.UTF8, "application/json");
+                try
+                {
+                    var request = new UploadCompleteRequest
+                    {
+                        FileName = fileName,
+                        FileSize = fileSize,
+                        StorageKey = storageKey
+                    };
+                    var json = JsonConvert.SerializeObject(request);
+                    var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-            var response = await _httpClient.PostAsync($"{_baseUrl}/api/addin/orders/{orderId}/upload-complete", content);
-            response.EnsureSuccessStatusCode();
+                    var response = await _httpClient.PostAsync($"{_baseUrl}/api/addin/orders/{orderId}/upload-complete", content);
+                    
+                    if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+                    {
+                        throw new ApiUnauthorizedException("Session expired. Please sign in again.");
+                    }
+                    
+                    response.EnsureSuccessStatusCode();
+                    return;
+                }
+                catch (ApiUnauthorizedException)
+                {
+                    throw;
+                }
+                catch (HttpRequestException ex) when (attempt < maxRetries)
+                {
+                    lastException = ex;
+                    await Task.Delay(TimeSpan.FromSeconds(Math.Pow(2, attempt - 1)));
+                }
+                catch (TaskCanceledException ex) when (attempt < maxRetries)
+                {
+                    lastException = ex;
+                    await Task.Delay(TimeSpan.FromSeconds(Math.Pow(2, attempt - 1)));
+                }
+            }
+            
+            throw new HttpRequestException($"Failed to mark upload complete after {maxRetries} attempts.", lastException);
         }
 
         public async Task<Order> GetOrderStatusAsync(string orderId)

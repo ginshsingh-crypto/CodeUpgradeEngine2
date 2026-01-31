@@ -68,6 +68,35 @@ namespace LOD400Uploader.Views
             _apiService.LoadFromConfig();
 
             LoadSheets();
+            
+            // Validate session on load (async, non-blocking)
+            ValidateSessionOnLoadAsync();
+        }
+        
+        private async void ValidateSessionOnLoadAsync()
+        {
+            try
+            {
+                if (_apiService.HasSession)
+                {
+                    // Silently validate the session in background
+                    // If invalid, we'll prompt login when they try to upload
+                    // This just pre-warms the connection
+                    await System.Threading.Tasks.Task.Run(async () =>
+                    {
+                        try
+                        {
+                            using (var client = new System.Net.Http.HttpClient())
+                            {
+                                client.Timeout = TimeSpan.FromSeconds(5);
+                                await client.GetAsync($"{App.ApiBaseUrl}/api/health");
+                            }
+                        }
+                        catch { /* Ignore - just a pre-warm */ }
+                    });
+                }
+            }
+            catch { /* Ignore any errors during background validation */ }
         }
 
         private void LoadSheets()
@@ -540,6 +569,59 @@ namespace LOD400Uploader.Views
                     _uploadCancellation = null;
                     UploadHelper.DecrementActiveUploads();
                 }
+            }
+            catch (System.Net.Http.HttpRequestException ex)
+            {
+                _packagingService.CleanupAll();
+                
+                string errorMsg = "Network error during upload.\n\n";
+                if (ex.Message.Contains("No such host") || ex.Message.Contains("name resolution"))
+                {
+                    errorMsg += "Unable to connect to the server. Please check your internet connection.";
+                }
+                else if (ex.Message.Contains("actively refused"))
+                {
+                    errorMsg += "Server is temporarily unavailable. Please try again in a few minutes.";
+                }
+                else
+                {
+                    errorMsg += $"{ex.Message}\n\nPlease check your connection and try again.";
+                }
+                
+                MessageBox.Show(errorMsg, "Connection Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                
+                HideProgress();
+                ProgressBar.IsIndeterminate = false;
+                UploadButton.IsEnabled = true;
+                CancelButton.IsEnabled = true;
+            }
+            catch (TaskCanceledException ex) when (!_uploadCancellation?.IsCancellationRequested ?? true)
+            {
+                _packagingService.CleanupAll();
+                
+                MessageBox.Show(
+                    "The operation timed out. This can happen with large files or slow connections.\n\n" +
+                    "Please try again - the upload will resume from where it left off.",
+                    "Timeout",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+                
+                HideProgress();
+                ProgressBar.IsIndeterminate = false;
+                UploadButton.IsEnabled = true;
+                CancelButton.IsEnabled = true;
+            }
+            catch (InvalidOperationException ex)
+            {
+                _packagingService.CleanupAll();
+                
+                // These are our custom user-friendly error messages
+                MessageBox.Show(ex.Message, "Cannot Upload", MessageBoxButton.OK, MessageBoxImage.Warning);
+                
+                HideProgress();
+                ProgressBar.IsIndeterminate = false;
+                UploadButton.IsEnabled = true;
+                CancelButton.IsEnabled = true;
             }
             catch (Exception ex)
             {

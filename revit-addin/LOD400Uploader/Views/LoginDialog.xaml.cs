@@ -159,6 +159,13 @@ namespace LOD400Uploader.Views
                 ShowError("Please enter your email address.");
                 return;
             }
+            
+            // Basic email format validation
+            if (!email.Contains("@") || !email.Contains("."))
+            {
+                ShowError("Please enter a valid email address.");
+                return;
+            }
 
             if (string.IsNullOrEmpty(password))
             {
@@ -184,8 +191,26 @@ namespace LOD400Uploader.Views
                 }
                 else
                 {
-                    ShowError(loginResult.ErrorMessage ?? "Invalid email or password.");
+                    // Provide more helpful error messages
+                    string errorMsg = loginResult.ErrorMessage ?? "Invalid email or password.";
+                    if (errorMsg.Contains("not found") || errorMsg.Contains("no account"))
+                    {
+                        errorMsg = "No account found with this email. Please register first.";
+                    }
+                    else if (errorMsg.Contains("password") || errorMsg.Contains("invalid"))
+                    {
+                        errorMsg = "Incorrect password. Please try again or reset your password.";
+                    }
+                    ShowError(errorMsg);
                 }
+            }
+            catch (System.Net.Http.HttpRequestException)
+            {
+                ShowError("Unable to connect. Please check your internet connection.");
+            }
+            catch (TaskCanceledException)
+            {
+                ShowError("Connection timed out. Please try again.");
             }
             catch (Exception ex)
             {
@@ -210,6 +235,13 @@ namespace LOD400Uploader.Views
                 ShowRegError("Please enter your email address.");
                 return;
             }
+            
+            // Basic email format validation
+            if (!email.Contains("@") || !email.Contains("."))
+            {
+                ShowRegError("Please enter a valid email address.");
+                return;
+            }
 
             if (string.IsNullOrEmpty(password))
             {
@@ -220,6 +252,20 @@ namespace LOD400Uploader.Views
             if (password.Length < 6)
             {
                 ShowRegError("Password must be at least 6 characters.");
+                return;
+            }
+            
+            // Check for password strength
+            bool hasLetter = false;
+            bool hasDigit = false;
+            foreach (char c in password)
+            {
+                if (char.IsLetter(c)) hasLetter = true;
+                if (char.IsDigit(c)) hasDigit = true;
+            }
+            if (!hasLetter || !hasDigit)
+            {
+                ShowRegError("Password must contain at least one letter and one number.");
                 return;
             }
 
@@ -248,8 +294,22 @@ namespace LOD400Uploader.Views
                 }
                 else
                 {
-                    ShowRegError(registerResult.ErrorMessage ?? "Registration failed.");
+                    // Provide more helpful error messages
+                    string errorMsg = registerResult.ErrorMessage ?? "Registration failed.";
+                    if (errorMsg.Contains("already exists") || errorMsg.Contains("already registered"))
+                    {
+                        errorMsg = "This email is already registered. Please sign in instead.";
+                    }
+                    ShowRegError(errorMsg);
                 }
+            }
+            catch (System.Net.Http.HttpRequestException)
+            {
+                ShowRegError("Unable to connect. Please check your internet connection.");
+            }
+            catch (TaskCanceledException)
+            {
+                ShowRegError("Connection timed out. Please try again.");
             }
             catch (Exception ex)
             {
