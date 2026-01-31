@@ -208,7 +208,7 @@ namespace LOD400Uploader.Views
             {
                 ShowError("Unable to connect. Please check your internet connection.");
             }
-            catch (TaskCanceledException)
+            catch (System.Threading.Tasks.TaskCanceledException)
             {
                 ShowError("Connection timed out. Please try again.");
             }
@@ -307,7 +307,7 @@ namespace LOD400Uploader.Views
             {
                 ShowRegError("Unable to connect. Please check your internet connection.");
             }
-            catch (TaskCanceledException)
+            catch (System.Threading.Tasks.TaskCanceledException)
             {
                 ShowRegError("Connection timed out. Please try again.");
             }

@@ -595,7 +595,7 @@ namespace LOD400Uploader.Views
                 UploadButton.IsEnabled = true;
                 CancelButton.IsEnabled = true;
             }
-            catch (TaskCanceledException ex) when (!_uploadCancellation?.IsCancellationRequested ?? true)
+            catch (TaskCanceledException) when (!_uploadCancellation?.IsCancellationRequested ?? true)
             {
                 _packagingService.CleanupAll();
                 

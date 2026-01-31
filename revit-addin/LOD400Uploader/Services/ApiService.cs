@@ -675,20 +675,20 @@ namespace LOD400Uploader.Services
 
                     return etag;
                 }
-                catch (OperationCanceledException)
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
-                    throw; // Don't retry on cancellation
+                    throw; // Don't retry on user-requested cancellation
+                }
+                catch (OperationCanceledException ex) when (attempt < maxRetries)
+                {
+                    // Timeout - retry with backoff
+                    lastException = ex;
+                    await Task.Delay(TimeSpan.FromSeconds(Math.Pow(2, attempt - 1)), cancellationToken);
                 }
                 catch (HttpRequestException ex) when (attempt < maxRetries)
                 {
                     lastException = ex;
                     // Exponential backoff: 1s, 2s, 4s
-                    await Task.Delay(TimeSpan.FromSeconds(Math.Pow(2, attempt - 1)), cancellationToken);
-                }
-                catch (TaskCanceledException ex) when (!cancellationToken.IsCancellationRequested && attempt < maxRetries)
-                {
-                    // Timeout - retry with backoff
-                    lastException = ex;
                     await Task.Delay(TimeSpan.FromSeconds(Math.Pow(2, attempt - 1)), cancellationToken);
                 }
             }
