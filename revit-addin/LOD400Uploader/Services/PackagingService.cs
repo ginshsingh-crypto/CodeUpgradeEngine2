@@ -122,7 +122,8 @@ namespace LOD400Uploader.Services
             data.ModelCopyPath = Path.Combine(data.TempDir, fileName);
 
             bool isWorkshared = document.IsWorkshared;
-            bool isCloudModel = IsCloudPath(originalPath);
+            // Use multiple methods to detect cloud models - both path string and API check
+            bool isCloudModel = IsCloudPath(originalPath) || IsCloudModelByApi(document);
             
             string progressMessage = isWorkshared 
                 ? "Creating detached copy of workshared model..." 
@@ -243,10 +244,18 @@ namespace LOD400Uploader.Services
                 }
                 finally
                 {
-                    // Only close if we opened a separate background document
-                    if (needToCloseWorkingDoc && workingDoc != null)
+                    // CRITICAL: Only close if we opened a SEPARATE background document
+                    // Never try to close the active document - this causes "active document may not be closed" error
+                    if (needToCloseWorkingDoc && workingDoc != null && !object.ReferenceEquals(workingDoc, document))
                     {
-                        workingDoc.Close(false);
+                        try
+                        {
+                            workingDoc.Close(false);
+                        }
+                        catch (Autodesk.Revit.Exceptions.InvalidOperationException)
+                        {
+                            // If close fails, it might be the active document - just ignore
+                        }
                     }
                 }
             }
@@ -523,7 +532,74 @@ namespace LOD400Uploader.Services
             if (string.IsNullOrEmpty(path)) return false;
             return path.StartsWith("BIM 360://", StringComparison.OrdinalIgnoreCase) ||
                    path.StartsWith("autodesk.docs://", StringComparison.OrdinalIgnoreCase) ||
-                   path.StartsWith("ACC://", StringComparison.OrdinalIgnoreCase);
+                   path.StartsWith("ACC://", StringComparison.OrdinalIgnoreCase) ||
+                   path.StartsWith("cloud://", StringComparison.OrdinalIgnoreCase) ||
+                   path.Contains("://") && !path.StartsWith("C:") && !path.StartsWith("D:"); // URL-like paths that aren't local
+        }
+        
+        /// <summary>
+        /// Uses Revit API to detect if a document is a cloud model.
+        /// More reliable than string matching on path.
+        /// </summary>
+        private static bool IsCloudModelByApi(Document document)
+        {
+            try
+            {
+                if (document == null) return false;
+                
+                // Check 1: Is the path a local file path that exists?
+                string pathName = document.PathName;
+                if (!string.IsNullOrEmpty(pathName))
+                {
+                    // If path looks like a cloud path based on our check
+                    if (IsCloudPath(pathName))
+                    {
+                        return true;
+                    }
+                    
+                    // If path is a normal local path format but file doesn't exist,
+                    // it's likely a cloud model with a cached local representation
+                    if (pathName.Length >= 2 && pathName[1] == ':' && !File.Exists(pathName))
+                    {
+                        // Looks like a local path (C:\...) but file doesn't exist - could be cloud
+                        return true;
+                    }
+                }
+                
+                // Check 2: For workshared documents, check the central model path
+                if (document.IsWorkshared)
+                {
+                    try
+                    {
+                        ModelPath centralPath = document.GetWorksharingCentralModelPath();
+                        if (centralPath != null)
+                        {
+                            // Use reflection to check CloudPath property (added in Revit 2019)
+                            var cloudPathProperty = centralPath.GetType().GetProperty("CloudPath");
+                            if (cloudPathProperty != null)
+                            {
+                                bool isCloud = (bool)cloudPathProperty.GetValue(centralPath);
+                                if (isCloud) return true;
+                            }
+                            
+                            // Alternative: check the string representation
+                            string centralPathStr = ModelPathUtils.ConvertModelPathToUserVisiblePath(centralPath);
+                            if (IsCloudPath(centralPathStr))
+                            {
+                                return true;
+                            }
+                        }
+                    }
+                    catch { /* Ignore errors in worksharing check */ }
+                }
+                
+                return false;
+            }
+            catch
+            {
+                // If any error occurs during detection, assume NOT cloud
+                return false;
+            }
         }
 
         private List<LinkToCopy> CollectLinkPaths(Document document)
