@@ -112,6 +112,14 @@ export async function registerRoutes(
   await setupAuth(app);
 
   // ============================================
+  // HEALTH CHECK ENDPOINT (NO AUTH REQUIRED)
+  // Used by add-in to verify connectivity before upload
+  // ============================================
+  app.get("/api/health", (req, res) => {
+    res.json({ status: "ok", timestamp: new Date().toISOString() });
+  });
+
+  // ============================================
   // PUBLIC CONTACT FORM (NO AUTH REQUIRED)
   // ============================================
   const contactFormSchema = z.object({

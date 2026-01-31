@@ -307,6 +307,34 @@ namespace LOD400Uploader.Views
                     }
                 }
 
+                ProgressText.Text = "Checking connection...";
+                ProgressBar.Value = 2;
+                
+                // Quick network connectivity check before starting
+                try
+                {
+                    using (var testClient = new System.Net.Http.HttpClient())
+                    {
+                        testClient.Timeout = TimeSpan.FromSeconds(10);
+                        var response = await testClient.GetAsync($"{App.ApiBaseUrl}/api/health");
+                        // We just want to know if we can reach the server
+                    }
+                }
+                catch (Exception)
+                {
+                    MessageBox.Show(
+                        "Unable to connect to the server. Please check your internet connection and try again.\n\n" +
+                        "If the problem persists, the service may be temporarily unavailable.",
+                        "Connection Error",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                    
+                    HideProgress();
+                    UploadButton.IsEnabled = true;
+                    CancelButton.IsEnabled = true;
+                    return;
+                }
+                
                 ProgressText.Text = "Creating order...";
                 ProgressBar.Value = 5;
                 

@@ -185,7 +185,41 @@ namespace LOD400Uploader.Services
                     
                     // For cloud models, save a local copy - Revit handles this automatically
                     // Note: This changes the active document's path to the temp location temporarily
-                    workingDoc.SaveAs(data.ModelCopyPath, saveOptions);
+                    try
+                    {
+                        workingDoc.SaveAs(data.ModelCopyPath, saveOptions);
+                    }
+                    catch (Autodesk.Revit.Exceptions.InvalidOperationException ex)
+                    {
+                        // Handle common SaveAs failures with user-friendly messages
+                        if (ex.Message.Contains("central model"))
+                        {
+                            throw new InvalidOperationException(
+                                "Cannot save a copy of this workshared model. Please ensure you have:\n" +
+                                "1. Synchronized your latest changes\n" +
+                                "2. Released all borrowed elements\n\n" +
+                                "Then try uploading again.");
+                        }
+                        throw new InvalidOperationException($"Failed to create local copy: {ex.Message}");
+                    }
+                    catch (Autodesk.Revit.Exceptions.OperationCanceledException)
+                    {
+                        throw new InvalidOperationException("Save operation was cancelled. Please try again.");
+                    }
+                    catch (Exception ex) when (ex.Message.Contains("disk") || ex.Message.Contains("space"))
+                    {
+                        throw new InvalidOperationException(
+                            "Not enough disk space to create a local copy.\n\n" +
+                            "Please free up space in your temp folder and try again.");
+                    }
+                    
+                    // Verify the file was actually created
+                    if (!File.Exists(data.ModelCopyPath))
+                    {
+                        throw new InvalidOperationException(
+                            "Failed to create local copy of the model. The file was not saved.\n\n" +
+                            "Please try again or use File > Save As to create a local copy first.");
+                    }
                     
                     // For cloud models: After SaveAs, the document path changed to temp
                     // We'll handle this by noting the original path was cloud-based
@@ -406,7 +440,31 @@ namespace LOD400Uploader.Services
 
                 // Create ZIP - use NoCompression because .rvt files are already internally compressed
                 // Double-compressing burns CPU with ~0.1% size savings and makes packaging 3-5x slower
-                ZipFile.CreateFromDirectory(data.TempDir, _zipPath, CompressionLevel.NoCompression, false);
+                try
+                {
+                    ZipFile.CreateFromDirectory(data.TempDir, _zipPath, CompressionLevel.NoCompression, false);
+                }
+                catch (IOException ex) when (ex.Message.Contains("disk") || ex.Message.Contains("space"))
+                {
+                    throw new InvalidOperationException(
+                        "Not enough disk space to create the upload package.\n\n" +
+                        "Please free up space and try again.");
+                }
+                catch (IOException ex)
+                {
+                    throw new InvalidOperationException(
+                        $"Failed to create upload package: {ex.Message}\n\n" +
+                        "Please check that no other applications are accessing the files and try again.");
+                }
+                
+                // Verify the ZIP was created and has content
+                var zipInfo = new FileInfo(_zipPath);
+                if (!zipInfo.Exists || zipInfo.Length == 0)
+                {
+                    throw new InvalidOperationException(
+                        "Failed to create upload package. The package file is empty.\n\n" +
+                        "Please try again or contact support if the issue persists.");
+                }
 
                 progressCallback?.Invoke(90, "Cleaning up temporary files...");
                 CleanupTempDirectory();

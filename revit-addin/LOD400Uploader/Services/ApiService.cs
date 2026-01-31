@@ -362,20 +362,43 @@ namespace LOD400Uploader.Services
 
         /// <summary>
         /// Get a presigned URL for a multipart part upload.
+        /// Includes retry logic for transient network failures.
         /// </summary>
         private async Task<string> GetMultipartPartUploadUrlAsync(string orderId, string uploadId, string storageKey, int partNumber)
         {
             EnsureSession();
-            var request = new { uploadId, storageKey, partNumber };
-            var json = JsonConvert.SerializeObject(request);
-            var content = new StringContent(json, Encoding.UTF8, "application/json");
+            
+            const int maxRetries = 3;
+            Exception lastException = null;
+            
+            for (int attempt = 1; attempt <= maxRetries; attempt++)
+            {
+                try
+                {
+                    var request = new { uploadId, storageKey, partNumber };
+                    var json = JsonConvert.SerializeObject(request);
+                    var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-            var response = await _httpClient.PostAsync($"{_baseUrl}/api/addin/orders/{orderId}/resumable-upload/part-url", content);
-            response.EnsureSuccessStatusCode();
+                    var response = await _httpClient.PostAsync($"{_baseUrl}/api/addin/orders/{orderId}/resumable-upload/part-url", content);
+                    response.EnsureSuccessStatusCode();
 
-            var responseJson = await response.Content.ReadAsStringAsync();
-            var result = JsonConvert.DeserializeObject<dynamic>(responseJson);
-            return (string)result.uploadUrl;
+                    var responseJson = await response.Content.ReadAsStringAsync();
+                    var result = JsonConvert.DeserializeObject<dynamic>(responseJson);
+                    return (string)result.uploadUrl;
+                }
+                catch (HttpRequestException ex) when (attempt < maxRetries)
+                {
+                    lastException = ex;
+                    await Task.Delay(TimeSpan.FromSeconds(Math.Pow(2, attempt - 1)));
+                }
+                catch (TaskCanceledException ex) when (attempt < maxRetries)
+                {
+                    lastException = ex;
+                    await Task.Delay(TimeSpan.FromSeconds(Math.Pow(2, attempt - 1)));
+                }
+            }
+            
+            throw new HttpRequestException($"Failed to get upload URL after {maxRetries} attempts.", lastException);
         }
 
         /// <summary>
@@ -527,30 +550,59 @@ namespace LOD400Uploader.Services
             int bytesRead,
             CancellationToken cancellationToken)
         {
-            var request = new HttpRequestMessage(HttpMethod.Put, uploadUrl);
-            request.Content = new ByteArrayContent(buffer, 0, bytesRead);
-            request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/zip");
-            request.Content.Headers.ContentLength = bytesRead;
-
-            var response = await _chunkUploadClient.SendAsync(request, cancellationToken);
-            response.EnsureSuccessStatusCode();
-
-            string etag = null;
-            if (response.Headers.ETag != null)
+            const int maxRetries = 3;
+            Exception lastException = null;
+            
+            for (int attempt = 1; attempt <= maxRetries; attempt++)
             {
-                etag = response.Headers.ETag.Tag;
-            }
-            else if (response.Headers.TryGetValues("ETag", out var values))
-            {
-                etag = values.FirstOrDefault();
-            }
+                try
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    
+                    var request = new HttpRequestMessage(HttpMethod.Put, uploadUrl);
+                    request.Content = new ByteArrayContent(buffer, 0, bytesRead);
+                    request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/zip");
+                    request.Content.Headers.ContentLength = bytesRead;
 
-            if (string.IsNullOrEmpty(etag))
-            {
-                throw new HttpRequestException("Missing ETag from part upload response");
-            }
+                    var response = await _chunkUploadClient.SendAsync(request, cancellationToken);
+                    response.EnsureSuccessStatusCode();
 
-            return etag;
+                    string etag = null;
+                    if (response.Headers.ETag != null)
+                    {
+                        etag = response.Headers.ETag.Tag;
+                    }
+                    else if (response.Headers.TryGetValues("ETag", out var values))
+                    {
+                        etag = values.FirstOrDefault();
+                    }
+
+                    if (string.IsNullOrEmpty(etag))
+                    {
+                        throw new HttpRequestException("Missing ETag from part upload response");
+                    }
+
+                    return etag;
+                }
+                catch (OperationCanceledException)
+                {
+                    throw; // Don't retry on cancellation
+                }
+                catch (HttpRequestException ex) when (attempt < maxRetries)
+                {
+                    lastException = ex;
+                    // Exponential backoff: 1s, 2s, 4s
+                    await Task.Delay(TimeSpan.FromSeconds(Math.Pow(2, attempt - 1)), cancellationToken);
+                }
+                catch (TaskCanceledException ex) when (!cancellationToken.IsCancellationRequested && attempt < maxRetries)
+                {
+                    // Timeout - retry with backoff
+                    lastException = ex;
+                    await Task.Delay(TimeSpan.FromSeconds(Math.Pow(2, attempt - 1)), cancellationToken);
+                }
+            }
+            
+            throw new HttpRequestException($"Upload failed after {maxRetries} attempts. Please check your internet connection and try again.", lastException);
         }
 
         private void EnsureSession()
