@@ -20,7 +20,10 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
         return localStorage.getItem("selectedCompanyId") || null;
     });
 
-    const { data: balanceData, isLoading } = useQuery({
+    const { data: balanceData, isLoading } = useQuery<{
+        personal: number;
+        companies: Array<{ id: string; name: string; balanceSar: number; role: string }>;
+    }>({
         queryKey: ["/api/balance"],
         staleTime: 1000 * 60 * 5, // 5 minutes
     });
@@ -38,7 +41,7 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
         }
     }, [selectedCompanyId]);
 
-    const personalBalance = balanceData?.personal?.balanceSar || 0;
+    const personalBalance = balanceData?.personal || 0;
     const currentBalance = selectedCompany ? selectedCompany.balanceSar : personalBalance;
 
     return (

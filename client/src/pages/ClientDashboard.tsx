@@ -1,30 +1,12 @@
-import { CompanyContextSwitcher } from "@/components/CompanyContextSwitcher";
-import { BalanceDisplay } from "@/components/BalanceDisplay";
-
-// ... imports
-
-<header className="flex items-center justify-between gap-4 border-b px-4 py-3 md:px-6">
-  <div className="flex items-center gap-3">
-    <SidebarTrigger data-testid="button-sidebar-toggle" />
-    <div>
-      <h1 className="text-lg font-semibold">My Orders</h1>
-      <p className="text-sm text-muted-foreground">
-        Track your LOD 400 upgrade orders
-      </p>
-    </div>
-  </div>
-  <div className="flex items-center gap-2">
-    <BalanceDisplay />
-    <CompanyContextSwitcher />
-    <ThemeToggle />
-  </div>
-</header>
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { OrdersTable } from "@/components/OrdersTable";
 import { OrderDetailModal } from "@/components/OrderDetailModal";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { CompanyContextSwitcher } from "@/components/CompanyContextSwitcher";
+import { BalanceDisplay } from "@/components/BalanceDisplay";
 import { Button } from "@/components/ui/button";
 import {
   FileBox,
@@ -32,9 +14,9 @@ import {
   Clock,
   Loader2,
   Download,
-  ExternalLink,
 } from "lucide-react";
 import type { OrderWithFiles } from "@shared/schema";
+import type { File as FileRecord } from "@shared/schema";
 
 export default function ClientDashboard() {
   const [selectedOrder, setSelectedOrder] = useState<OrderWithFiles | null>(null);

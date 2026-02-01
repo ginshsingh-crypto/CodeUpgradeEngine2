@@ -35,7 +35,10 @@ export default function CompanyManagement() {
     // Let's assume for now we might need to add a "list my companies" endpoint or similar.
     // Wait, `getUserBalances` returns companies. Maybe we use that?
 
-    const { data: balanceData } = useQuery({
+    const { data: balanceData } = useQuery<{
+        personal: number;
+        companies: Array<{ id: string; name: string; balanceSar: number; role: string }>;
+    }>({
         queryKey: ["/api/balance"],
     });
 

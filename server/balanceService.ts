@@ -15,7 +15,7 @@ import {
 } from "@shared/schema";
 // Payment integration placeholder - balance topup via direct admin credit for now
 // TODO: Integrate Stripe Checkout for self-service topups
-async function createPaymentPlaceholder(options: any) {
+async function createPaymentPlaceholder(_options: any): Promise<never> {
     throw new Error("Balance top-up via payment gateway not yet configured. Please contact admin to add credits to your account.");
 }
 
@@ -53,54 +53,11 @@ export class BalanceService {
      * Creates a pending transaction and returns checkout URL/details
      */
     static async initiateTopUp(
-        userId: string,
-        amountSar: number,
-        companyId?: string
-    ) {
-        if (amountSar <= 0) {
-            throw new Error("Amount must be positive");
-        }
-
-        // Create a pending transaction record
-        const [transaction] = await db
-            .insert(balanceTransactions)
-            .values({
-                userId,
-                companyId: companyId || null,
-                type: "topup",
-                amountSar,
-                status: "pending",
-                note: `Balance top-up via Moyasar`,
-            })
-            .returning();
-
-        // Initiate payment gateway
-        // We pass the transaction ID in metadata so webhook can link it
-        const payment = await createPaymentPlaceholder({
-            amount: amountSar * 100, // Convert to halalas
-            currency: "SAR",
-            description: `Balance Top-up: ${amountSar} SAR`,
-            callback_url: `${process.env.APP_URL}/api/balance/topup-callback`,
-            metadata: {
-                transactionId: transaction.id,
-                type: "topup",
-            },
-        });
-
-        // Update transaction with payment ID
-        await db
-            .update(balanceTransactions)
-            .set({ paymentId: payment.id })
-            .where(eq(balanceTransactions.id, transaction.id));
-
-        return {
-            transactionId: transaction.id,
-            paymentId: payment.id,
-            amount: payment.amount,
-            currency: payment.currency,
-            status: payment.status,
-            // For redirect flow, we might return payment details for frontend to handle
-        };
+        _userId: string,
+        _amountSar: number,
+        _companyId?: string
+    ): Promise<never> {
+        throw new Error("Balance top-up via payment gateway not yet configured. Please contact admin to add credits to your account.");
     }
 
     /**
@@ -315,9 +272,9 @@ export class BalanceService {
             // Let's assume return to User Personal for simplicity unless we tracked companyId in request.
             // IMPORTANT: In `requestRefund`, I put `companyId: null`. 
             // We should probably try to find the original debit transaction for this order to know where to refund.
-            const originalDebit = await tx.query.balanceTransactions.findFirst({
-                where: (t, { and, eq }) => and(eq(t.orderId, request.orderId), eq(t.type, "debit"))
-            });
+            const originalDebit = request.orderId ? await tx.query.balanceTransactions.findFirst({
+                where: and(eq(balanceTransactions.orderId, request.orderId), eq(balanceTransactions.type, "debit"))
+            }) : null;
 
             const targetCompanyId = originalDebit?.companyId;
             const targetUserId = request.userId;

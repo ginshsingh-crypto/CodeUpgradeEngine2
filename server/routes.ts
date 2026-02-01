@@ -1529,33 +1529,10 @@ For pre-compiled versions, contact support.
     companyId: z.string().uuid().optional(),
   });
 
-  app.post("/api/balance/topup", isAuthenticated, async (req: any, res) => {
-    try {
-      const parsed = topupSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ message: "Invalid request", errors: parsed.error.errors });
-      }
-
-      const { amountSar, companyId } = parsed.data;
-
-      const { BalanceService } = await import("./balanceService");
-
-      // If companyId is provided, verify membership
-      if (companyId) {
-        // TODO: add specific permission check for "admin" role if needed
-      }
-
-      const result = await BalanceService.initiateTopUp(req.dbUser.id, amountSar, companyId);
-
-      // Construct payment URL
-      const { buildPaymentFormUrl } = await import("./moyasarClient");
-      const paymentUrl = buildPaymentFormUrl(result.paymentId);
-
-      res.json({ ...result, paymentUrl });
-    } catch (error) {
-      console.error("Error initiating top-up:", error);
-      res.status(500).json({ message: "Failed to initiate top-up" });
-    }
+  app.post("/api/balance/topup", isAuthenticated, async (_req: any, res) => {
+    return res.status(501).json({ 
+      message: "Balance top-up via payment gateway not yet configured. Please contact admin to add credits to your account." 
+    });
   });
 
   // Callback for Moyasar after top-up payment

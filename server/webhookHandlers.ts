@@ -86,7 +86,7 @@ export class WebhookHandlers {
       }
 
       await storage.updateOrder(orderId, {
-        stripePaymentIntentId: payment.id,
+        paymentId: payment.id,
         status: "paid",
         paidAt: new Date()
       });

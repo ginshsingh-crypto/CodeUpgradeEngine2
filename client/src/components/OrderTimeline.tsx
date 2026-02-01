@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 import { Check, Clock, CreditCard, Upload, Cog, CheckCircle } from "lucide-react";
 
-type OrderStatus = "pending" | "paid" | "uploaded" | "processing" | "complete";
+type OrderStatus = "pending" | "paid" | "uploaded" | "processing" | "complete" | "expired" | "cancelled";
 
 interface OrderTimelineProps {
   status: OrderStatus;

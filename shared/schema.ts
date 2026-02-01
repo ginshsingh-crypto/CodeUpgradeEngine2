@@ -136,12 +136,29 @@ export const insertOrderSheetSchema = createInsertSchema(orderSheets).omit({
   createdAt: true,
 });
 
+export const insertApiKeySchema = createInsertSchema(apiKeys).omit({
+  id: true,
+  createdAt: true,
+});
+
 // Types for new tables
 export type File = typeof files.$inferSelect;
+export type InsertFile = typeof files.$inferInsert;
 export type OrderSheet = typeof orderSheets.$inferSelect;
 export type ApiKey = typeof apiKeys.$inferSelect;
+export type InsertApiKey = typeof apiKeys.$inferInsert;
 export type AddinSession = typeof addinSessions.$inferSelect;
 export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
+
+// User types
+export type UpsertUser = Partial<typeof users.$inferInsert> & { id: string };
+
+// Sheet info type used for order creation
+export type SheetInfo = {
+  sheetElementId: string;
+  sheetNumber: string;
+  sheetName: string;
+};
 
 // Create order request schema (used by both web and add-in)
 export const createOrderRequestSchema = z.object({
@@ -306,6 +323,7 @@ export const insertBalanceTransactionSchema = createInsertSchema(balanceTransact
 // Types
 export type Company = typeof companies.$inferSelect;
 export type CompanyMember = typeof companyMembers.$inferSelect;
+export type InsertCompanyMember = typeof companyMembers.$inferInsert;
 export type BalanceTransaction = typeof balanceTransactions.$inferSelect;
 export type UserBalance = typeof userBalances.$inferSelect;
 

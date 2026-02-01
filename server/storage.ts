@@ -359,7 +359,7 @@ export class DatabaseStorage implements IStorage {
 
   async updateApiKeyLastUsed(id: string): Promise<void> {
     await db.update(apiKeys)
-      .set({ lastUsed: new Date() })
+      .set({ lastUsedAt: new Date() })
       .where(eq(apiKeys.id, id));
   }
 

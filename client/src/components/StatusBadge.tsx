@@ -1,8 +1,8 @@
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { Clock, CreditCard, Upload, Cog, CheckCircle } from "lucide-react";
+import { Clock, CreditCard, Upload, Cog, CheckCircle, XCircle, AlertTriangle } from "lucide-react";
 
-type OrderStatus = "pending" | "paid" | "uploaded" | "processing" | "complete";
+type OrderStatus = "pending" | "paid" | "uploaded" | "processing" | "complete" | "expired" | "cancelled";
 
 interface StatusBadgeProps {
   status: OrderStatus;
@@ -37,6 +37,16 @@ const statusConfig: Record<
     label: "Complete",
     className: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 border-green-200 dark:border-green-800",
     icon: CheckCircle,
+  },
+  expired: {
+    label: "Expired",
+    className: "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400 border-gray-200 dark:border-gray-800",
+    icon: AlertTriangle,
+  },
+  cancelled: {
+    label: "Cancelled",
+    className: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 border-red-200 dark:border-red-800",
+    icon: XCircle,
   },
 };
 
