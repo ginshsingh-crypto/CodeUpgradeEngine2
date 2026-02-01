@@ -14,13 +14,11 @@ export function getSession() {
   const pgStore = connectPg(session);
   const sessionStore = new pgStore({
     conString: process.env.DATABASE_URL,
-    createTableIfMissing: true, // Auto-create sessions table on fresh deployments
+    createTableIfMissing: true,
     ttl: sessionTtl,
     tableName: "sessions",
   });
   
-  // In production or on Replit (which always uses HTTPS proxy), use secure cookies
-  // For local development without HTTPS, allow insecure cookies
   const isSecure = process.env.NODE_ENV === "production" || !!process.env.REPL_ID;
   
   return session({
@@ -41,7 +39,6 @@ export async function setupAuth(app: Express) {
   app.set("trust proxy", 1);
   app.use(getSession());
 
-  // Simple logout route - clears the session
   app.post("/api/logout", (req: Request, res: Response) => {
     req.session.destroy((err) => {
       if (err) {
@@ -53,7 +50,6 @@ export async function setupAuth(app: Express) {
     });
   });
 
-  // GET logout for easy redirect
   app.get("/api/logout", (req: Request, res: Response) => {
     req.session.destroy((err) => {
       res.clearCookie("connect.sid");
@@ -62,7 +58,6 @@ export async function setupAuth(app: Express) {
   });
 }
 
-// Middleware to check if user is authenticated via session
 export const isAuthenticated: RequestHandler = async (req: Request, res: Response, next: NextFunction) => {
   const userId = req.session?.userId;
 
@@ -70,19 +65,16 @@ export const isAuthenticated: RequestHandler = async (req: Request, res: Respons
     return res.status(401).json({ message: "Unauthorized" });
   }
 
-  // Verify user still exists in database
   const user = await storage.getUser(userId);
   if (!user) {
     req.session.destroy(() => {});
     return res.status(401).json({ message: "Unauthorized" });
   }
 
-  // Attach user to request for downstream use
   (req as any).dbUser = user;
   return next();
 };
 
-// Middleware to check if user is an admin
 export const isAdmin: RequestHandler = async (req: Request, res: Response, next: NextFunction) => {
   const userId = req.session?.userId;
 

@@ -1,28 +1,46 @@
-import { verifyWebhookSignature, getPayment } from './moyasarClient';
 import { storage } from './storage';
 import { sendOrderPaidEmail } from './emailService';
+import crypto from 'crypto';
+
+/**
+ * Verify webhook signature using HMAC-SHA256
+ * This is the standard webhook verification pattern
+ */
+function verifyWebhookSignature(rawBody: string, signature: string, secret: string): boolean {
+  try {
+    const expectedSignature = crypto
+      .createHmac('sha256', secret)
+      .update(rawBody, 'utf8')
+      .digest('hex');
+    
+    return crypto.timingSafeEqual(
+      Buffer.from(signature, 'utf8'),
+      Buffer.from(expectedSignature, 'utf8')
+    );
+  } catch {
+    return false;
+  }
+}
 
 export class WebhookHandlers {
   /**
-   * Process Moyasar webhook event
+   * Process payment webhook event (generic handler)
    * @param rawBody - The raw request body as a string (used for signature verification)
    * @param payload - The parsed JSON payload
-   * @param signature - The X-Moyasar-Signature header value
+   * @param signature - The signature header value
    */
   static async processWebhook(rawBody: string, payload: any, signature: string): Promise<void> {
-    const webhookSecret = process.env.MOYASAR_WEBHOOK_SECRET;
+    const webhookSecret = process.env.PAYMENT_WEBHOOK_SECRET;
 
     // In production, we must have a webhook secret
     if (!webhookSecret) {
       if (process.env.NODE_ENV === 'production') {
-        console.error('MOYASAR_WEBHOOK_SECRET is not set');
+        console.error('PAYMENT_WEBHOOK_SECRET is not set');
         return;
       }
     }
 
     // Verify signature if secret is present
-    // CRITICAL: Use rawBody (exact bytes received) for signature verification
-    // JSON.stringify(payload) may produce different output due to key ordering, formatting, etc.
     if (webhookSecret && signature) {
       if (!verifyWebhookSignature(rawBody, signature, webhookSecret)) {
         throw new Error('Invalid webhook signature');
@@ -31,12 +49,9 @@ export class WebhookHandlers {
 
     const event = payload;
 
-    // Moyasar events: payment.paid, payment.failed, etc.
-    // The payload structure is { id: "...", type: "payment.paid", ... }
+    console.log(`Received webhook event: ${event.type}`);
 
-    console.log(`Received Moyasar webhook event: ${event.type}`);
-
-    if (event.type === 'payment.paid') {
+    if (event.type === 'payment.paid' || event.type === 'checkout.session.completed') {
       const payment = event.data;
       await WebhookHandlers.handlePaymentPaid(payment);
     }
@@ -63,23 +78,22 @@ export class WebhookHandlers {
       }
 
       // Security: Verify payment amount matches order total
-      // Prevents manipulation where attacker pays less than order price
-      const expectedAmountHalala = order.totalPriceSar * 100; // Moyasar uses halala (1 SAR = 100 halala)
-      if (payment.amount !== expectedAmountHalala) {
-        console.error(`Payment amount mismatch for order ${orderId}: expected ${expectedAmountHalala} halala, got ${payment.amount} halala`);
+      const expectedAmount = order.totalPriceSar * 100; // Amount in smallest unit
+      const receivedAmount = payment.amount || payment.amount_total;
+      if (receivedAmount && receivedAmount !== expectedAmount) {
+        console.error(`Payment amount mismatch for order ${orderId}: expected ${expectedAmount}, got ${receivedAmount}`);
         return;
       }
 
       await storage.updateOrder(orderId, {
-        moyasarPaymentId: payment.id,
-        moyasarInvoiceId: payment.invoice_id,
+        stripePaymentIntentId: payment.id,
         status: "paid",
         paidAt: new Date()
       });
 
       console.log(`Order ${orderId} marked as paid`);
 
-      // Send payment confirmation email (fetch full order with user relations)
+      // Send payment confirmation email
       const fullOrder = await storage.getOrderWithFiles(orderId);
       if (fullOrder?.user?.email) {
         sendOrderPaidEmail(

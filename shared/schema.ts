@@ -59,8 +59,8 @@ export const orders = pgTable("orders", {
   sheetCount: integer("sheet_count").notNull(),
   totalPriceSar: integer("total_price_sar").notNull(),
   status: orderStatusEnum("status").notNull().default("pending"),
-  moyasarPaymentId: varchar("moyasar_payment_id"),
-  moyasarInvoiceId: varchar("moyasar_invoice_id"),
+  paymentId: varchar("moyasar_payment_id"),
+  invoiceId: varchar("moyasar_invoice_id"),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -163,8 +163,8 @@ export const orderWithFilesSchema = z.object({
   sheetCount: z.number(),
   totalPriceSar: z.number(),
   status: z.enum(["pending", "paid", "uploaded", "processing", "complete", "expired", "cancelled"]),
-  moyasarPaymentId: z.string().nullable(),
-  moyasarInvoiceId: z.string().nullable(),
+  paymentId: z.string().nullable(),
+  invoiceId: z.string().nullable(),
   notes: z.string().nullable(),
   createdAt: z.date().nullable(),
   updatedAt: z.date().nullable(),
@@ -232,7 +232,7 @@ export const balanceTransactions = pgTable("balance_transactions", {
   type: varchar("type").notNull(), // 'topup' | 'debit' | 'refund_request' | 'refund_approved'
   amountSar: integer("amount_sar").notNull(), // Positive for credit, negative for debit
   orderId: varchar("order_id").references(() => orders.id),
-  moyasarPaymentId: varchar("moyasar_payment_id").unique(), // Unique for webhook idempotency
+  paymentId: varchar("moyasar_payment_id").unique(), // Unique for webhook idempotency
   status: varchar("status").notNull().default("completed"), // 'pending' | 'completed' | 'rejected'
   note: text("note"),
   approvedBy: varchar("approved_by").references(() => users.id),

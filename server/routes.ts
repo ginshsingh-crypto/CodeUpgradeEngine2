@@ -1385,7 +1385,7 @@ export async function registerRoutes(
       });
 
       // Store payment ID for verification in callback
-      await storage.updateOrder(orderId, { moyasarPaymentId: payment.id });
+      await storage.updateOrder(orderId, { paymentId: payment.id });
 
       // Return 3DS redirect URL
       res.json({
@@ -1408,7 +1408,7 @@ export async function registerRoutes(
       try {
         // Verify payment matches order
         const order = await storage.getOrder(orderId);
-        if (order && order.moyasarPaymentId === paymentId) {
+        if (order && order.paymentId === paymentId) {
           await storage.updateOrderStatus(orderId, "paid");
 
           // Send confirmation email

@@ -13,7 +13,11 @@ import {
     Company,
     CompanyMember
 } from "@shared/schema";
-import { createPayment } from "./moyasarClient";
+// Payment integration placeholder - balance topup via direct admin credit for now
+// TODO: Integrate Stripe Checkout for self-service topups
+async function createPaymentPlaceholder(options: any) {
+    throw new Error("Balance top-up via payment gateway not yet configured. Please contact admin to add credits to your account.");
+}
 
 export class BalanceService {
     /**
@@ -70,9 +74,9 @@ export class BalanceService {
             })
             .returning();
 
-        // Initiate Moyasar payment
+        // Initiate payment gateway
         // We pass the transaction ID in metadata so webhook can link it
-        const payment = await createPayment({
+        const payment = await createPaymentPlaceholder({
             amount: amountSar * 100, // Convert to halalas
             currency: "SAR",
             description: `Balance Top-up: ${amountSar} SAR`,
@@ -86,7 +90,7 @@ export class BalanceService {
         // Update transaction with payment ID
         await db
             .update(balanceTransactions)
-            .set({ moyasarPaymentId: payment.id })
+            .set({ paymentId: payment.id })
             .where(eq(balanceTransactions.id, transaction.id));
 
         return {
@@ -116,8 +120,8 @@ export class BalanceService {
         }
 
         // Verify payment ID matches (security check)
-        if (transaction.moyasarPaymentId && transaction.moyasarPaymentId !== paymentId) {
-            console.warn(`Payment ID mismatch for transaction ${transactionId}: expected ${transaction.moyasarPaymentId}, got ${paymentId}`);
+        if (transaction.paymentId && transaction.paymentId !== paymentId) {
+            console.warn(`Payment ID mismatch for transaction ${transactionId}: expected ${transaction.paymentId}, got ${paymentId}`);
             // Could be a race condition or retry with different payment, but we should be careful.
             // For now, if we have a payment ID on record, we strictly check it.
         }
