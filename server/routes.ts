@@ -747,10 +747,10 @@ export async function registerRoutes(
     try {
       const userId = req.dbUser.id;
       const { orderId } = req.params;
-      const { fileName, fileSize, uploadURL } = req.body;
+      const { fileName, fileSize, uploadURL, storageKey: clientStorageKey } = req.body;
 
-      if (!fileName || !uploadURL) {
-        return res.status(400).json({ message: "fileName and uploadURL are required" });
+      if (!fileName || (!uploadURL && !clientStorageKey)) {
+        return res.status(400).json({ message: "fileName and (uploadURL or storageKey) are required" });
       }
 
       const order = await storage.getOrder(orderId);
@@ -762,10 +762,8 @@ export async function registerRoutes(
         return res.status(403).json({ message: "Forbidden" });
       }
 
-      const storageKey = objectStorage.normalizeStorageKey(uploadURL);
+      const storageKey = clientStorageKey || objectStorage.normalizeStorageKey(uploadURL);
 
-      // Security check: Verify file actually exists in GCS before recording
-      // Prevents "fake upload" attacks where client claims upload without data
       const verification = await objectStorage.verifyFileExists(storageKey);
       if (!verification.exists) {
         console.warn(`Upload verification failed for order ${orderId}: file not found at ${storageKey}`);
@@ -1221,10 +1219,10 @@ export async function registerRoutes(
     try {
       const userId = req.apiUser.id;
       const { orderId } = req.params;
-      const { fileName, fileSize, uploadURL } = req.body;
+      const { fileName, fileSize, uploadURL, storageKey: clientStorageKey } = req.body;
 
-      if (!fileName || !uploadURL) {
-        return res.status(400).json({ message: "fileName and uploadURL are required" });
+      if (!fileName || (!uploadURL && !clientStorageKey)) {
+        return res.status(400).json({ message: "fileName and (uploadURL or storageKey) are required" });
       }
 
       const order = await storage.getOrder(orderId);
@@ -1236,10 +1234,8 @@ export async function registerRoutes(
         return res.status(403).json({ message: "Forbidden" });
       }
 
-      const storageKey = objectStorage.normalizeStorageKey(uploadURL);
+      const storageKey = clientStorageKey || objectStorage.normalizeStorageKey(uploadURL);
 
-      // Security check: Verify file actually exists in GCS before recording
-      // Prevents "fake upload" attacks where client claims upload without data
       const verification = await objectStorage.verifyFileExists(storageKey);
       if (!verification.exists) {
         console.warn(`Upload verification failed for order ${orderId}: file not found at ${storageKey}`);
